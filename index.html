@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Room Service · Control de Vajilla</title>
+<style>
+:root{
+  --bg:#0d0f11; --panel:#7b7c7e; --panel2:#5d5f62; --tab:#30363c; --tab-act:#777a53;
+  --red:#b01226; --green:#007a00; --blue:#336699; --turq:#70b3ae; --gold:#dba95b;
+  --olive:#6b8a6a; --key:#64788a; --amar:#f0c000; --purple:#7a6a99;
+  --font:"Segoe UI","Segoe UI Variable",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --k:1;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:var(--font);color:#fff;user-select:none;-webkit-user-select:none}
+input,select,textarea{user-select:text;-webkit-user-select:text;font-family:inherit}
+button{font-family:inherit}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform:translate(-50%,-50%) scale(var(--k));transform-origin:center center;background:var(--bg);display:grid;grid-template-rows:80px minmax(0,1fr) 78px 36px;overflow:hidden}
+
+/* barra de pestañas */
+#tabs{display:flex;gap:8px;padding:8px 8px 6px;background:#000}
+#tabs button{flex:1;background:var(--tab);color:#e8e8e8;border:0;font-size:27px;cursor:pointer;letter-spacing:.2px}
+#tabs button.act{background:var(--tab-act);color:#fff}
+#tabs .sm{display:none}
+
+/* zona principal */
+#main{display:grid;grid-template-columns:minmax(0,1fr) 182px;min-height:0;background:#000}
+#main.no-rail{grid-template-columns:minmax(0,1fr)}
+#main.no-rail #rail{display:none}
+#rail{display:flex;flex-direction:column;gap:2px;padding-left:2px;overflow-y:auto;min-height:0}
+#rail button{flex:0 0 auto;min-height:76px;background:var(--tab);color:#eee;border:0;font-size:21px;cursor:pointer;padding:6px;line-height:1.15}
+#rail button.act{background:var(--tab-act);color:#fff}
+#rail .sep{flex:0 0 auto;height:14px}
+#content{position:relative;background:var(--panel);min-height:0;overflow:hidden}
+.view{position:absolute;inset:0;display:none;flex-direction:column;min-height:0}
+.view.on{display:flex}
+
+/* barra de acciones inferior y barra dorada */
+#actions{display:grid;grid-template-columns:repeat(5,1fr);gap:3px;background:#000;padding-top:3px}
+.btn{border:0;color:#fff;font-size:25px;cursor:pointer;line-height:1.1;padding:4px 8px}
+.btn:active{filter:brightness(.78)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.b-red{background:var(--red)} .b-green{background:var(--green)} .b-blue{background:var(--blue)}
+.b-turq{background:var(--turq)} .b-gold{background:var(--gold)} .b-olive{background:var(--olive)}
+.b-gray{background:#6a6c6f} .b-purple{background:var(--purple)} .b-dark{background:var(--tab)}
+#status{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:#000;padding:2px 4px 4px}
+#status div{background:var(--gold);color:#fff;text-align:center;font-size:19px;line-height:30px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#status div.clk{cursor:pointer}
+#status div.alert{background:var(--red);font-weight:700}
+#status .fast{display:inline-block;background:#fff;color:#a8630f;padding:0 8px;margin-left:8px;font-weight:700;line-height:22px}
+
+/* franjas de filtros */
+.strip{display:flex;gap:10px;align-items:center;padding:10px 12px;background:var(--panel2);flex:0 0 auto;flex-wrap:wrap}
+.strip input,.strip select{height:54px;font-size:22px;padding:0 14px;border:1px solid #222;background:#fff;color:#111;border-radius:2px;min-width:250px}
+.strip .grow{flex:1}
+.strip .btn{height:54px;padding:0 18px;font-size:21px}
+.chip{display:inline-flex;align-items:center;gap:8px;padding:0 14px;height:54px;font-size:20px;font-weight:700;border:0;cursor:pointer;color:#fff;border:2px solid rgba(0,0,0,.3)}
+.chip b{font-size:26px}
+
+/* estados / colores de órdenes */
+.k-PREPARACION{background:#f4f4f4;color:#14161a}
+.k-SIN_ASIGNAR{background:#b3b5b8;color:#14161a}
+.k-ASIGNADO{background:var(--blue);color:#fff}
+.k-VERDE{background:var(--green);color:#fff}
+.k-AMARILLO{background:var(--amar);color:#1a1500}
+.k-ROJO{background:var(--red);color:#fff}
+.k-RETIRADO{background:#000;color:#fff}
+.k-LIBRE{background:#6a6c6f;color:#ddd}
+.card.k-ROJO,.rcard.k-ROJO{animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,80,80,0)}50%{box-shadow:0 0 0 7px rgba(255,90,90,.6)}}
+
+/* tablero */
+.cols{flex:1;display:grid;gap:6px;padding:8px;min-height:0;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+.col{display:flex;flex-direction:column;min-height:0;background:#6a6c6f;border-radius:2px}
+.col-h{flex:0 0 auto;padding:10px 12px;background:var(--tab);display:flex;justify-content:space-between;font-size:22px;font-weight:600}
+.col-b{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.empty{padding:30px 10px;text-align:center;font-size:20px;opacity:.7}
+.card{position:relative;flex:0 0 auto;border-radius:3px;cursor:pointer;padding:8px 14px 8px;border:3px solid rgba(0,0,0,.25)}
+.card.ro{cursor:default}
+.c-top{display:flex;justify-content:space-between;font-size:20px;font-weight:600;opacity:.9}
+.c-room{font-size:60px;font-weight:700;line-height:1.05}
+.c-state{font-size:19px;font-weight:700;letter-spacing:.6px}
+.c-meta{display:flex;justify-content:space-between;align-items:center;font-size:19px;margin-top:2px;min-height:34px}
+.c-time{font-variant-numeric:tabular-nums;font-size:32px;font-weight:700}
+.c-btns{display:flex;gap:6px;margin-top:6px}
+.mini{border:0;background:rgba(0,0,0,.28);color:inherit;font-size:16px;padding:7px 12px;cursor:pointer;border-radius:2px;font-weight:600}
+.k-PREPARACION .mini,.k-SIN_ASIGNAR .mini,.k-AMARILLO .mini{background:rgba(0,0,0,.16)}
+.mini:active{filter:brightness(.7)}
+
+/* runner */
+.rgrid{flex:1;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(410px,1fr));gap:10px;padding:10px;align-content:start;min-height:0}
+.rcard{position:relative;border-radius:4px;min-height:280px;display:flex;flex-direction:column;cursor:pointer;border:4px solid rgba(0,0,0,.3);overflow:hidden}
+.r-top{padding:12px 16px 0;display:flex;justify-content:space-between;font-size:28px;font-weight:600}
+.r-timer{font-variant-numeric:tabular-nums;font-weight:700}
+.r-room{font-size:120px;font-weight:700;line-height:1;text-align:center;padding:2px 0}
+.r-state{text-align:center;font-size:32px;font-weight:700;letter-spacing:.5px}
+.r-who{text-align:center;font-size:22px;opacity:.9;min-height:30px}
+.r-act{margin-top:auto;background:rgba(0,0,0,.34);color:#fff;text-align:center;font-size:25px;font-weight:700;padding:14px 6px;white-space:nowrap;letter-spacing:.4px}
+.r-undo{position:absolute;right:10px;top:84px;width:58px;height:54px;font-size:26px;font-weight:700;border-radius:3px}
+
+/* operadora */
+.op{flex:1;display:grid;grid-template-columns:690px minmax(0,1fr);gap:10px;padding:10px;min-height:0}
+.op-left{background:var(--panel2);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.op-title{font-size:28px;font-weight:600}
+.fld{background:#fff;color:#111;border:5px solid #fff;padding:4px 14px;cursor:pointer}
+.fld.act{border-color:var(--gold)}
+.fld label{display:block;font-size:16px;color:#666;font-weight:700;letter-spacing:.5px}
+.fld .val{font-size:46px;min-height:58px;font-weight:600;letter-spacing:1px}
+.opmsg{min-height:34px;font-size:20px;font-weight:600}
+.opmsg.ok{color:#bff0b0}.opmsg.err{color:#ffc2c2}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;flex:1;min-height:0}
+.pad button{border:0;background:var(--key);color:#fff;font-size:40px;cursor:pointer;min-height:70px}
+.pad button:active{filter:brightness(.75)}
+.pad .wide{grid-column:span 3}
+.pad button.sm{font-size:28px}
+.op-right{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px;min-height:0}
+.box{background:var(--panel2);display:flex;flex-direction:column;min-height:0}
+.box h2{padding:10px 14px;background:var(--tab);font-size:24px;font-weight:600;flex:0 0 auto;display:flex;justify-content:space-between}
+.tbl-wrap{overflow:auto;flex:1;min-height:0}
+table.t{width:100%;border-collapse:collapse;font-size:20px;color:#fff}
+.t th{position:sticky;top:0;background:var(--tab);text-align:left;padding:10px 12px;font-weight:600;white-space:nowrap;z-index:1}
+.t td{padding:8px 12px;border-bottom:1px solid rgba(0,0,0,.25);white-space:nowrap}
+.t tr:nth-child(even) td{background:rgba(255,255,255,.05)}
+.t tr.clk{cursor:pointer}
+.pill{display:inline-block;padding:2px 12px;border-radius:2px;font-weight:700;font-size:17px;border:1px solid rgba(0,0,0,.35)}
+.t .mini{background:var(--tab);color:#fff;font-size:17px;padding:6px 12px}
+.num{font-variant-numeric:tabular-nums}
+
+/* base de datos */
+.dbbody{flex:1;overflow:auto;min-height:0;padding:0}
+.pad-in{padding:12px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.kpi{background:var(--tab);padding:12px 16px}
+.kpi b{display:block;font-size:44px;font-weight:700;line-height:1.1}
+.kpi span{font-size:18px;opacity:.85}
+.kpi.k-ROJO{background:var(--red)}
+.h2{font-size:24px;font-weight:600;margin:14px 0 8px}
+.bars .br{display:flex;align-items:center;gap:10px;margin-bottom:5px;font-size:19px}
+.bars .br i{flex:0 0 120px;font-style:normal}
+.bars .br u{display:block;height:24px;background:var(--turq);text-decoration:none}
+.bars .br em{font-style:normal;font-weight:700}
+.fmap{padding:12px}
+.fmap-row{display:flex;gap:4px;align-items:center;margin-bottom:3px}
+.fmap-row .fl{flex:0 0 70px;font-size:18px;font-weight:700;text-align:right;padding-right:8px}
+.fcell{width:66px;height:34px;font-size:17px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(0,0,0,.45);font-weight:600}
+.legend{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.legend span{padding:4px 12px;font-size:17px;font-weight:700;border:1px solid rgba(0,0,0,.4)}
+
+/* asistente */
+.ai{flex:1;display:flex;flex-direction:column;min-height:0}
+.ai-log{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;min-height:0}
+.msg{max-width:78%;padding:12px 18px;font-size:23px;line-height:1.35;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text}
+.msg.u{align-self:flex-end;background:var(--blue)}
+.msg.b{align-self:flex-start;background:var(--tab)}
+.msg .acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.msg .acts button{border:0;color:#fff;font-size:20px;padding:10px 18px;cursor:pointer}
+.ai-chips{display:flex;gap:8px;flex-wrap:wrap;padding:8px 14px;background:var(--panel2);flex:0 0 auto}
+.ai-chips button{border:0;background:var(--tab);color:#fff;font-size:19px;padding:10px 16px;cursor:pointer}
+.ai-in{display:flex;gap:6px;padding:10px 14px;background:var(--panel2);flex:0 0 auto}
+.ai-in input{flex:1;height:64px;font-size:25px;padding:0 16px;border:0;background:#fff;color:#111}
+.ai-in .btn{width:220px;font-size:24px}
+
+/* configuración */
+.cfg{flex:1;overflow:auto;padding:18px 22px;min-height:0}
+.cfg h2{font-size:30px;font-weight:600;margin-bottom:14px}
+.row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;font-size:23px}
+.row .lbl{flex:0 0 360px}
+.row .btn{min-width:110px;height:62px;font-size:22px}
+.row .btn.sel{background:var(--tab-act);outline:3px solid #fff}
+.row input[type=text],.row input[type=password],.row input[type=number],.row select{height:58px;font-size:22px;padding:0 14px;border:0;background:#fff;color:#111;min-width:380px}
+.note{font-size:18px;opacity:.88;max-width:1100px;line-height:1.35;margin-bottom:14px}
+.val-big{font-size:34px;font-weight:700;min-width:90px;text-align:center}
+
+/* diálogos estilo Simphony */
+#modal{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50}
+#modal.on{display:flex}
+.dlg{background:#fff;color:#111;min-width:640px;max-width:1400px;max-height:94%;display:flex;flex-direction:column;border:2px solid #cfcfcf;box-shadow:0 10px 60px rgba(0,0,0,.6)}
+.dlg h3{background:var(--gold);color:#fff;font-size:26px;padding:8px 14px;font-weight:700}
+.dlg .body{padding:16px 22px;font-size:23px;overflow:auto;line-height:1.4;user-select:text;-webkit-user-select:text}
+.dlg .btns{display:flex;gap:6px;justify-content:center;padding:12px;flex-wrap:wrap}
+.dlg .btns button{min-width:190px;height:64px;border:0;font-size:22px;color:#fff;background:var(--gold);cursor:pointer;padding:0 14px}
+.dlg .btns button:active{filter:brightness(.8)}
+.dlg table{border-collapse:collapse;width:100%;font-size:20px;color:#111}
+.dlg th{background:#e9e9e9;text-align:left;padding:6px 10px}
+.dlg td{padding:6px 10px;border-bottom:1px solid #ddd}
+.dlg .kv{display:grid;grid-template-columns:230px 1fr;gap:4px 14px;margin-bottom:12px}
+.dlg .kv b{color:#555}
+.dlg .tgrid{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+.dlg .tgrid button{min-width:130px;height:62px;border:0;background:var(--tab);color:#fff;font-size:22px;cursor:pointer}
+.dlg .tgrid button.sel{background:var(--tab-act);outline:3px solid var(--gold)}
+.dlg input,.dlg select{height:54px;font-size:22px;padding:0 12px;border:1px solid #888;width:100%;margin-bottom:10px}
+.dlg label{font-size:18px;color:#555;font-weight:600}
+
+#toast{position:absolute;left:50%;bottom:140px;transform:translateX(-50%);padding:16px 34px;font-size:26px;font-weight:600;background:#1b1d20;color:#fff;border-left:10px solid var(--gold);z-index:60;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5);max-width:90%}
+#toast.err{border-left-color:var(--red)}#toast.ok{border-left-color:#3bb33b}
+
+/* inicio de sesión */
+#login{position:absolute;inset:0;z-index:40;background:
+  radial-gradient(ellipse at 20% 30%,rgba(224,160,70,.35),transparent 55%),
+  radial-gradient(ellipse at 80% 80%,rgba(224,140,40,.25),transparent 50%),
+  linear-gradient(135deg,#17110c,#35260f 55%,#14161a);display:flex;align-items:center;justify-content:space-around}
+#login.off{display:none}
+.lg-brand{font-family:Georgia,"Times New Roman",serif;font-size:190px;line-height:.95;color:rgba(255,255,255,.62);padding-left:60px;max-width:1000px}
+.lg-brand small{display:block;font-family:var(--font);font-size:34px;letter-spacing:6px;color:rgba(255,255,255,.7);margin-top:20px}
+.lg-box{width:480px;margin-right:100px}
+.lg-fld{background:#fff;color:#111;height:112px;font-size:60px;letter-spacing:10px;padding:0 20px;display:flex;align-items:center;margin-bottom:3px}
+.lg-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:3px}
+.lg-pad button{height:128px;border:0;background:rgba(80,100,125,.82);color:#fff;font-size:40px;cursor:pointer}
+.lg-pad button:active{filter:brightness(.7)}
+.lg-pad .clr{background:var(--red)} .lg-pad .go{background:var(--green)}
+.lg-err{min-height:44px;margin-top:10px;font-size:24px;color:#ffb3b3;font-weight:600}
+.lg-demo{position:absolute;left:0;bottom:0;height:80px;width:320px;background:var(--tab);color:#fff;border:0;font-size:24px;cursor:pointer}
+
+/* móvil / vertical */
+#stage.portrait{width:720px}
+#stage.portrait{grid-template-rows:64px minmax(0,1fr) 70px 34px}
+.portrait #tabs{gap:4px;padding:6px 4px 4px}
+.portrait #tabs button{font-size:19px;padding:0 2px}
+.portrait #tabs .lg{display:none}.portrait #tabs .sm{display:inline}
+.portrait #main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+.portrait #rail{grid-row:1;flex-direction:row;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.portrait #content{grid-row:2}
+.portrait #rail button{min-width:130px;min-height:60px;font-size:17px}
+.portrait .btn{font-size:17px}
+.portrait #status div{font-size:14px}
+.portrait .cols{grid-auto-columns:300px;overflow-x:auto}
+.portrait .strip input,.portrait .strip select{min-width:200px;height:48px;font-size:18px}
+.portrait .op{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto;overflow:auto;display:block}
+.portrait .op-left{margin-bottom:10px}
+.portrait .op-right{display:block}
+.portrait .op-right .box{margin-bottom:10px;max-height:420px}
+.portrait .pad button{min-height:78px;font-size:34px}
+.portrait .rgrid{grid-template-columns:minmax(0,1fr)}
+.portrait .rcard{min-height:310px}.portrait .r-room{font-size:96px}.portrait .r-undo,.portrait .r-info{top:72px}
+.portrait .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.portrait .row .lbl{flex:0 0 100%}
+.portrait .row input[type=text],.portrait .row input[type=password],.portrait .row select{min-width:100%}
+.portrait .dlg{min-width:0;width:96%}
+.portrait .dlg .btns button{min-width:140px;font-size:18px;height:54px}
+.portrait .dlg .kv{grid-template-columns:150px 1fr}
+.portrait .msg{max-width:92%;font-size:19px}
+.portrait .lg-brand{display:none}
+.portrait #login{justify-content:center}
+.portrait .lg-box{margin:0}
+.portrait .fcell{width:44px;font-size:13px}
+.portrait .fmap-row .fl{flex:0 0 48px;font-size:14px}
+.portrait .ai-in .btn{width:130px}
+.portrait .tbl-wrap,.portrait .dbbody{overflow:auto}
+
+.k-ANULADA{background:#444;color:#aaa}
+.chip.off{opacity:.38;filter:grayscale(.7)}
+.r-info{position:absolute;left:10px;top:84px;width:58px;height:54px;font-size:26px;font-weight:700;border-radius:3px}
+.chip.k-PREPARACION,.chip.k-SIN_ASIGNAR,.chip.k-AMARILLO{border-color:rgba(0,0,0,.4)}
+.dlg .btns button.sel{outline:3px solid #fff}
+.bars .br u.k-PREPARACION,.bars .br u.k-SIN_ASIGNAR,.bars .br u.k-ASIGNADO,.bars .br u.k-VERDE,.bars .br u.k-AMARILLO,.bars .br u.k-ROJO,.bars .br u.k-RETIRADO{border:1px solid rgba(255,255,255,.25)}
+
+.rgrid{grid-auto-rows:max-content}
+.rcard{overflow:visible}
+.rcard>*{flex-shrink:0}
+.gd{flex:1;overflow:auto;padding:18px 26px;min-height:0}
+.gd h2{font-size:32px;font-weight:600;margin-bottom:12px}
+.gd h3{font-size:25px;font-weight:600;margin:18px 0 8px;color:#ffe9b8}
+.gd p,.gd li{font-size:22px;line-height:1.45;max-width:1300px;user-select:text;-webkit-user-select:text}
+.gd p{margin-bottom:12px}
+.gd ul,.gd ol{margin:0 0 12px 32px}
+.gd li{margin-bottom:7px}
+.gd table{border-collapse:collapse;margin:8px 0 16px;font-size:20px;max-width:1350px;width:100%}
+.gd th{background:var(--tab);text-align:left;padding:10px 12px}
+.gd td{padding:9px 12px;border-bottom:1px solid rgba(0,0,0,.3);vertical-align:top;line-height:1.35}
+.gd .tip{background:rgba(0,0,0,.28);border-left:8px solid var(--gold);padding:12px 18px;margin:12px 0;font-size:21px;line-height:1.4;max-width:1300px}
+.gd .sw{display:inline-block;padding:2px 10px;font-weight:700;font-size:17px;border:1px solid rgba(0,0,0,.4);margin-right:6px}
+.msn{display:flex;gap:12px;align-items:flex-start;background:rgba(0,0,0,.22);margin-bottom:8px;padding:10px 12px;max-width:1350px}
+.msn .ck{flex:0 0 58px;height:58px;border:0;background:var(--tab);color:#fff;font-size:34px;cursor:pointer}
+.msn.done .ck{background:var(--green)}
+.msn .tx{flex:1;font-size:21px;line-height:1.4}
+.msn .tx b{font-size:23px}
+.msn .go{flex:0 0 200px;min-height:58px;border:0;background:var(--blue);color:#fff;font-size:20px;cursor:pointer;padding:4px 8px}
+.portrait .gd{padding:12px}
+.portrait .gd p,.portrait .gd li{font-size:17px}
+.portrait .gd table{font-size:15px;display:block;overflow-x:auto}
+.portrait .gd .tip{font-size:16px}
+.portrait .msn{flex-wrap:wrap}.portrait .msn .go{flex:1 1 100%}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="tabs"></div>
+  <div id="main">
+    <div id="content">
+      <div class="view" id="v-op"></div>
+      <div class="view" id="v-board"></div>
+      <div class="view" id="v-runner"></div>
+      <div class="view" id="v-db"></div>
+      <div class="view" id="v-ai"></div>
+      <div class="view" id="v-cfg"></div>
+      <div class="view" id="v-guide"></div>
+    </div>
+    <div id="rail"></div>
+  </div>
+  <div id="actions"></div>
+  <div id="status"></div>
+  <div id="modal"></div>
+  <div id="toast"></div>
+  <div id="login">
+    <div class="lg-brand">Room<br>Instant<br>Services<small>CONTROL DE VAJILLA</small></div>
+    <div class="lg-box"><div class="lg-fld" id="lgfld"></div><div class="lg-pad" id="lgpad"></div><div class="lg-err" id="lgerr"></div></div>
+    <button class="lg-demo" id="lgdemo">Acceso rápido (demo)</button>
+  </div>
+  <input type="file" id="fimp" accept=".json,application/json" style="display:none">
+</div>
+<script>
+'use strict';
+/* ================= utilidades ================= */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const p2=n=>String(n).padStart(2,'0');
+const LS_KEY='riss_vajilla_v2';
+const memStore={};
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return memStore[k]==null?null:memStore[k]}},set(k,v){try{localStorage.setItem(k,v)}catch(e){memStore[k]=v}}};
+const sess={get(k){try{return sessionStorage.getItem(k)}catch(e){return memStore['s_'+k]==null?null:memStore['s_'+k]}},set(k,v){try{sessionStorage.setItem(k,v)}catch(e){memStore['s_'+k]=v}},del(k){try{sessionStorage.removeItem(k)}catch(e){delete memStore['s_'+k]}}};
+const norm=s=>String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+
+/* ================= hotel: 187 habitaciones ================= */
+const FLOORS=[];for(let p=7;p<=25;p++)FLOORS.push({piso:p,n:p<=19?11:p<=24?8:4});
+const ROOMS=[];FLOORS.forEach(f=>{for(let i=1;i<=f.n;i++)ROOMS.push(f.piso*100+i)});
+function validarHab(txt){
+  txt=String(txt||'').trim();
+  if(!/^\d{3,4}$/.test(txt))return{ok:false,msg:'Habitación inválida (ej. 1204)'};
+  const h=+txt,piso=Math.floor(h/100),n=h%100,f=FLOORS.find(x=>x.piso===piso);
+  if(!f)return{ok:false,msg:`El piso ${piso} no existe (pisos 7 al 25)`};
+  if(n<1||n>f.n)return{ok:false,msg:`Piso ${piso}: habitaciones ${piso*100+1} a ${piso*100+f.n}`};
+  return{ok:true,hab:h,piso};
+}
+
+/* ================= roles y permisos ================= */
+const ROLES={operadora:'Operadora',runner:'Runner',supervisor:'Supervisor A&B',admin:'Administrador'};
+const PERM={
+  operadora:{tabs:['op','board','db','ai','guide'],reg:true,adv:false,anular:'prep',usersDb:false,admin:false},
+  runner:{tabs:['runner','board','db','ai','guide'],reg:false,adv:true,anular:false,usersDb:false,admin:false},
+  supervisor:{tabs:['op','board','runner','db','ai','guide','cfg'],reg:true,adv:true,anular:'all',usersDb:true,admin:false},
+  admin:{tabs:['op','board','runner','db','ai','guide','cfg'],reg:true,adv:true,anular:'all',usersDb:true,admin:true}
+};
+const DEFAULT_USERS=[
+  {name:'Operadora Instant',pin:'1111',rol:'operadora'},
+  {name:'Ana',pin:'2001',rol:'runner'},
+  {name:'Luis',pin:'2002',rol:'runner'},
+  {name:'Marta',pin:'2003',rol:'runner'},
+  {name:'Eric',pin:'3001',rol:'supervisor'},
+  {name:'Admin',pin:'0000',rol:'admin'}
+];
+
+/* ================= estados ================= */
+const MIN=60000;
+const LEVELS=['PREPARACION','SIN_ASIGNAR','ASIGNADO','VERDE','AMARILLO','ROJO','RETIRADO'];
+const NV={
+  PREPARACION:{label:'EN PREPARACIÓN',chip:'EN PREPARACIÓN'},
+  SIN_ASIGNAR:{label:'SIN ASIGNAR',chip:'SIN ASIGNAR'},
+  ASIGNADO:{label:'ASIGNADO',chip:'ASIGNADO'},
+  VERDE:{label:'ENTREGADO',chip:'ENTREGADO'},
+  AMARILLO:{label:'PRE-AVISO DE RETIRO',chip:'PRE-AVISO'},
+  ROJO:{label:'RECOLECCIÓN',chip:'RECOLECCIÓN'},
+  RETIRADO:{label:'RETIRADO',chip:'RETIRADO'},
+  ANULADA:{label:'ANULADA',chip:'ANULADA'}
+};
+const FILT_DEFAULT=()=>({PREPARACION:1,SIN_ASIGNAR:1,ASIGNADO:1,VERDE:1,AMARILLO:1,ROJO:1,RETIRADO:0});
+
+/* ================= estado global + persistencia ================= */
+let S=null;
+function defaults(){
+  const n=Date.now();
+  return{v:2,seq:0,orders:[],users:DEFAULT_USERS.map(u=>({...u})),log:[],undo:[],
+    cfg:{amarillo:45,rojo:60,sound:true,demo:true,apiKey:'',model:'claude-sonnet-5-5'},
+    clock:{aReal:n,aSim:n,speed:1}};
+}
+function normalizeState(d){
+  const b=defaults();
+  const s=Object.assign(b,d||{});
+  s.cfg=Object.assign(b.cfg,(d&&d.cfg)||{});
+  s.clock=Object.assign({aReal:Date.now(),aSim:Date.now(),speed:1},(d&&d.clock)||{});
+  if(!Array.isArray(s.orders))s.orders=[];
+  if(!Array.isArray(s.users)||!s.users.length)s.users=DEFAULT_USERS.map(u=>({...u}));
+  if(!Array.isArray(s.log))s.log=[];
+  if(!Array.isArray(s.undo))s.undo=[];
+  s.orders.forEach(o=>{if(!o.uid)o.uid=++s.seq;if(!o.stack)o.stack=[];if(!o.t)o.t={}});
+  s.seq=Math.max(s.seq||0,...s.orders.map(o=>o.uid),0);
+  return s;
+}
+function load(){
+  let raw=store.get(LS_KEY);
+  if(raw){try{return normalizeState(JSON.parse(raw))}catch(e){}}
+  S=defaults();seedDemo();return S;
+}
+function save(){try{store.set(LS_KEY,JSON.stringify(S))}catch(e){}}
+
+/* ================= reloj (con simulación acelerada) ================= */
+function simNow(){const c=S.clock;return c.aSim+(Date.now()-c.aReal)*c.speed}
+function setSpeed(v){const n=simNow();S.clock={aReal:Date.now(),aSim:n,speed:v};save()}
+function jumpClock(min){S.clock.aSim+=min*MIN;save()}
+function fmtDur(ms){ms=Math.max(0,ms);const s=Math.floor(ms/1000);return Math.floor(s/60)+':'+p2(s%60)}
+function fmtTime(ts){if(!ts)return'—';const d=new Date(ts);return`${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`}
+function fmtDT(ts){const d=new Date(ts);return`${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()} ${fmtTime(ts)}`}
+function fmtMin(n){return n==null?'—':n.toFixed(1)+' min'}
+
+/* ================= órdenes ================= */
+const getOrder=uid=>S.orders.find(o=>o.uid===+uid);
+function nivel(o,now){
+  if(o.estado==='ANULADA')return'ANULADA';
+  if(o.estado!=='ENTREGADO')return o.estado;
+  const m=((now==null?simNow():now)-o.t.entregado)/MIN;
+  if(m>=S.cfg.rojo)return'ROJO';
+  if(m>=S.cfg.amarillo)return'AMARILLO';
+  return'VERDE';
+}
+function logEv(ts,user,rol,accion,o,de,a,nota){
+  S.log.push({ts,user:user||'—',rol:rol||'',accion,orden:o.id,hab:o.hab,uid:o.uid,de:de||'',a:a||'',nota:nota||''});
+  if(S.log.length>3000)S.log.splice(0,S.log.length-3000);
+}
+function curUser(){const n=sess.get('riss_user');return S.users.find(u=>u.name===n)||null}
+function logNow(accion,o,de,a,nota){const u=curUser();logEv(simNow(),u&&u.name,u&&u.rol,accion,o,de,a,nota)}
+
+function snapOf(o){return JSON.parse(JSON.stringify({estado:o.estado,asignado:o.asignado||null,t:o.t,entregado_por:o.entregado_por||null,retirado_por:o.retirado_por||null,anticipado:!!o.anticipado}))}
+function stepOrder(o,time,uname){
+  const snap=snapOf(o),de=nivel(o,time);
+  if(o.estado==='PREPARACION'){o.estado='SIN_ASIGNAR';o.t.sin_asignar=time}
+  else if(o.estado==='SIN_ASIGNAR'){o.estado='ASIGNADO';o.asignado=uname;o.t.asignado=time}
+  else if(o.estado==='ASIGNADO'){o.estado='ENTREGADO';o.t.entregado=time;o.entregado_por=uname}
+  else if(o.estado==='ENTREGADO'){o.estado='RETIRADO';o.t.retirado=time;o.retirado_por=uname;o.anticipado=((time-o.t.entregado)/MIN)<S.cfg.rojo}
+  else return null;
+  o.stack.push(snap);
+  return{de,a:nivel(o,time)};
+}
+function advance(uid){
+  const o=getOrder(uid),u=curUser();if(!o||!u)return null;
+  const r=stepOrder(o,simNow(),u.name);if(!r)return null;
+  S.undo.push(o.uid);logNow('AVANCE',o,r.de,r.a);save();return{o,...r};
+}
+function restoreSnap(o,p){o.estado=p.estado;o.asignado=p.asignado;o.t=p.t;o.entregado_por=p.entregado_por;o.retirado_por=p.retirado_por;o.anticipado=p.anticipado}
+function anularOrder(uid,fromUndo){
+  const o=getOrder(uid);if(!o||o.estado==='ANULADA'||o.estado==='RETIRADO')return false;
+  const de=nivel(o);o.stack.push(snapOf(o));o.estado='ANULADA';
+  if(!fromUndo)S.undo.push(o.uid);
+  logNow('ANULAR',o,de,'ANULADA');save();return true;
+}
+function undoOrder(uid){
+  const o=getOrder(uid);if(!o)return false;
+  if(!o.stack.length&&o.estado==='PREPARACION'){
+    const i=S.undo.lastIndexOf(o.uid);if(i>=0)S.undo.splice(i,1);
+    return anularOrder(uid,true);
+  }
+  if(!o.stack.length)return false;
+  const de=nivel(o),p=o.stack.pop();restoreSnap(o,p);
+  const i=S.undo.lastIndexOf(o.uid);if(i>=0)S.undo.splice(i,1);
+  logNow('DESHACER',o,de,nivel(o));save();return true;
+}
+function undoLast(){
+  while(S.undo.length){
+    const uid=S.undo[S.undo.length-1],o=getOrder(uid);
+    if(!o){S.undo.pop();continue}
+    return undoOrder(uid)?o:null;
+  }
+  return null;
+}
+function createOrder(idTxt,habTxt){
+  let id=String(idTxt||'').trim();
+  if(!/^\d{1,8}$/.test(id))return{ok:false,msg:'Ingrese el ID Symphony (solo números)'};
+  id=id.replace(/^0+(?=\d)/,'');
+  const v=validarHab(habTxt);if(!v.ok)return v;
+  if(S.orders.some(o=>o.id===id&&o.estado!=='ANULADA'))return{ok:false,msg:`El ID #${id} ya existe (no se permiten duplicados)`};
+  const u=curUser(),o={uid:++S.seq,id,hab:v.hab,piso:v.piso,estado:'PREPARACION',asignado:null,t:{registrado:simNow()},stack:[],creado_por:u?u.name:'—'};
+  S.orders.push(o);S.undo.push(o.uid);logNow('REGISTRO',o,'','PREPARACION');save();
+  return{ok:true,o};
+}
+
+/* ================= métricas ================= */
+function metrics(){
+  const now=simNow(),A=S.orders.filter(o=>o.estado!=='ANULADA');
+  const by={};LEVELS.forEach(k=>by[k]=0);A.forEach(o=>by[nivel(o,now)]++);
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  const ret=A.filter(o=>o.estado==='RETIRADO').map(o=>(o.t.retirado-o.t.entregado)/MIN);
+  const ent=A.filter(o=>o.t.entregado).map(o=>(o.t.entregado-o.t.registrado)/MIN);
+  const pisos={};A.filter(o=>o.estado==='ENTREGADO').forEach(o=>{pisos[o.piso]=(pisos[o.piso]||0)+1});
+  return{total:A.length,by,activas:A.filter(o=>o.estado!=='RETIRADO').length,avgRet:avg(ret),avgEnt:avg(ent),pisos,anuladas:S.orders.length-A.length};
+}
+const minEnHab=(o,now)=>o.t.entregado?((o.estado==='RETIRADO'?o.t.retirado:now)-o.t.entregado)/MIN:null;
+
+/* ================= datos de ejemplo ================= */
+function seedDemo(){
+  const now=simNow();S.orders=[];S.log=[];S.undo=[];
+  const ops='Operadora Instant';
+  const order=['SIN_ASIGNAR','ASIGNADO','ENTREGADO','RETIRADO'];
+  // id, hab, estado final, min desde registro, min desde entrega, min desde retiro, cuenta que opera
+  const spec=[
+    [88391,1909,'RETIRADO',210,190,95,'Marta'],
+    [88392,1106,'RETIRADO',150,138,70,'Ana'],
+    [88410,1204,'ENTREGADO',92,83,0,'Ana'],
+    [88411,905,'ENTREGADO',80,66,0,'Luis'],
+    [88412,2203,'ENTREGADO',70,56,0,'Ana'],
+    [88413,1511,'ENTREGADO',64,48,0,'Marta'],
+    [88414,710,'ENTREGADO',44,31,0,'Luis'],
+    [88415,1802,'ENTREGADO',22,12,0,'Marta'],
+    [88416,2501,'ASIGNADO',9,0,0,'Luis'],
+    [88417,1008,'ASIGNADO',6,0,0,'Ana'],
+    [88418,1307,'SIN_ASIGNAR',4,0,0,'Ana'],
+    [88419,2406,'PREPARACION',2,0,0,'Ana'],
+    [88420,811,'PREPARACION',1,0,0,'Ana']
+  ];
+  spec.forEach(([id,hab,fin,reg,ent,ret,who])=>{
+    const v=validarHab(String(hab)),t0=now-reg*MIN;
+    const o={uid:++S.seq,id:String(id),hab,piso:v.piso,estado:'PREPARACION',asignado:null,t:{registrado:t0},stack:[],creado_por:ops};
+    logEv(t0,ops,'operadora','REGISTRO',o,'','PREPARACION');
+    const times=[t0+MIN,t0+3*MIN,now-ent*MIN,now-ret*MIN],last=order.indexOf(fin);
+    for(let i=0;i<=last;i++){const r=stepOrder(o,times[i],who);if(r)logEv(times[i],who,'runner','AVANCE',o,r.de,r.a)}
+    S.orders.push(o);
+  });
+  S.log.sort((a,b)=>a.ts-b.ts);
+  S.clock={aReal:Date.now(),aSim:now,speed:1};
+  save();
+}
+/* ================= UI: estado, helpers ================= */
+const UI={tab:'board',sub:'resumen',filt:FILT_DEFAULT(),mine:false,q:'',opF:'id',opId:'',opHab:'',opMsg:null,
+  dbq:'',dbst:'',aiMsgs:[],aiBusy:false,aiHist:[],pin:'',cfgMsg:'',gsub:'concepto'};
+const TABS=[
+  {k:'op',lg:'Operadora',sm:'Operadora'},{k:'board',lg:'Tablero A&B',sm:'Tablero'},{k:'runner',lg:'Runner',sm:'Runner'},
+  {k:'db',lg:'Base de datos',sm:'Datos'},{k:'ai',lg:'Asistente IA',sm:'IA'},{k:'cfg',lg:'Configuración',sm:'Config.'},{k:'guide',lg:'Guía',sm:'Guía'}];
+const C={red:'#b01226',green:'#007a00',blue:'#336699',gray:'#6a6c6f',turq:'#70b3ae'};
+const cur=curUser;
+const can=p=>{const u=cur();return!!(u&&PERM[u.rol][p])};
+const ACT={};
+
+function fit(){
+  const w=window.innerWidth,h=window.innerHeight,st=$('#stage');
+  let W=1920,H=1080,k=Math.min(w/1920,h/1080);
+  if(w/h<0.85){W=720;H=Math.round(720*h/w);k=w/720;st.classList.add('portrait')}else st.classList.remove('portrait');
+  st.style.width=W+'px';st.style.height=H+'px';st.style.setProperty('--k',k);
+}
+function toast(msg,type){
+  const t=$('#toast');t.textContent=msg;t.className=type||'';t.style.display='block';
+  clearTimeout(toast._t);toast._t=setTimeout(()=>{t.style.display='none'},2600);
+}
+function dlg({title,body,buttons}){
+  const m=$('#modal');
+  m.innerHTML=`<div class="dlg"><h3>${esc(title)}</h3><div class="body">${body||''}</div><div class="btns"></div></div>`;
+  const bx=$('.btns',m);
+  (buttons||[{label:'Cerrar'}]).forEach(b=>{
+    const x=document.createElement('button');x.textContent=b.label;if(b.bg)x.style.background=b.bg;
+    x.onclick=()=>{if(!b.keep)closeDlg();if(b.fn)b.fn()};bx.appendChild(x);
+  });
+  m.classList.add('on');
+}
+function closeDlg(){const m=$('#modal');m.classList.remove('on');m.innerHTML=''}
+function confirmDlg(title,msg,okLabel,fn,bg){
+  dlg({title,body:msg,buttons:[{label:okLabel,bg:bg||C.green,fn},{label:'Cancelar',bg:C.gray}]});
+}
+function download(name,text,mime){
+  const b=new Blob([text],{type:mime}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},600);
+}
+const stamp=()=>{const d=new Date(simNow());return`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`};
+function pill(k){return`<span class="pill k-${k}">${NV[k].chip}</span>`}
+
+/* ================= render general ================= */
+const RENDER={};
+function render(){
+  const u=cur();if(!u){showLogin();return}
+  $('#login').classList.add('off');
+  if(!PERM[u.rol].tabs.includes(UI.tab))UI.tab=PERM[u.rol].tabs[0];
+  if(UI.tab==='db'&&UI.sub==='usuarios'&&!can('usersDb'))UI.sub='resumen';
+  renderTabs();renderRail();renderActions();renderStatus();
+  $$('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+UI.tab));
+  const el=$('#v-'+UI.tab);
+  const sc=$$('.rgrid,.cfg,.dbbody,.col-b,.tbl-wrap,.ai-log',el).map(x=>x.scrollTop);
+  RENDER[UI.tab]();
+  $$('.rgrid,.cfg,.dbbody,.col-b,.tbl-wrap',el).forEach((x,i)=>{if(sc[i])x.scrollTop=sc[i]});
+}
+function renderTabs(){
+  const u=cur();
+  $('#tabs').innerHTML=TABS.filter(t=>PERM[u.rol].tabs.includes(t.k)).map(t=>
+    `<button data-act="tab" data-arg="${t.k}" class="${UI.tab===t.k?'act':''}"><span class="lg">${t.lg}</span><span class="sm">${t.sm}</span></button>`).join('');
+}
+const SUBS=[['resumen','Resumen'],['ordenes','Órdenes'],['mapa','Mapa de pisos'],['bitacora','Bitácora'],['usuarios','Usuarios']];
+function renderRail(){
+  const show=UI.tab==='db'||UI.tab==='guide';
+  $('#main').classList.toggle('no-rail',!show);
+  let h='';
+  if(UI.tab==='db')h=SUBS.filter(([k])=>k!=='usuarios'||can('usersDb')).map(([k,l])=>`<button data-act="sub" data-arg="${k}" class="${UI.sub===k?'act':''}">${l}</button>`).join('');
+  else if(UI.tab==='guide')h=GSUBS.map(([k,l])=>`<button data-act="sub" data-arg="${k}" class="${UI.gsub===k?'act':''}">${l}</button>`).join('');
+  $('#rail').innerHTML=h;
+}
+function renderStatus(){
+  const u=cur();if(!u)return;
+  const now=simNow(),rojo=S.orders.filter(o=>nivel(o,now)==='ROJO').length,sp=S.clock.speed;
+  $('#status').innerHTML=
+    `<div class="clk" data-act="logout">${esc(u.name)}${u.name===ROLES[u.rol]?'':' · '+ROLES[u.rol]}</div>`+
+    `<div class="clk" data-act="clock">${fmtDT(now)}</div>`+
+    `<div class="clk ${rojo?'alert':''}" data-act="goRojo">Por retirar: ${rojo}</div>`+
+    `<div class="clk" data-act="clock">Velocidad ×${sp}${sp>1?'<span class="fast">ACELERADO</span>':''}</div>`;
+}
+function renderActions(){
+  const t=UI.tab,B=(label,cls,act,arg)=>`<button class="btn ${cls}" data-act="${act}"${arg!=null?` data-arg="${arg}"`:''}>${label}</button>`;
+  const out=B('Cerrar sesión','b-red','logout'),help=B('Ayuda','b-olive','help');
+  let h;
+  if(t==='op')h=[out,B('Limpiar campos','b-gray','opk','clr'),B('Deshacer último','b-blue','undoLast'),B('Ir al tablero','b-turq','tab','board'),help];
+  else if(t==='board')h=[out,B('Deshacer último','b-blue','undoLast'),B(UI.filt.RETIRADO?'Ocultar retirados':'Ver todos','b-olive','filtToggleRet'),B('Exportar CSV','b-turq','csv'),help];
+  else if(t==='runner')h=[out,B('Deshacer último','b-blue','undoLast'),B('Buscar habitación','b-turq','findRoom'),B(UI.mine?'Ver todas':'Solo mías','b-green','mine'),help];
+  else if(t==='db')h=can('admin')?[out,B('Exportar CSV','b-turq','csv'),B('Exportar JSON','b-blue','json'),B('Importar JSON','b-green','import'),help]:[out,B('Exportar CSV','b-turq','csv'),B('Mapa de pisos','b-blue','sub','mapa'),B('Bitácora','b-green','sub','bitacora'),help];
+  else if(t==='ai')h=[out,B('Limpiar chat','b-gray','aiClear'),B('Guardar chat (.txt)','b-blue','aiSave'),B('Configurar IA','b-turq','tab','cfg'),help];
+  else if(t==='guide')h=[out,B('Descargar guía (.txt)','b-blue','guideTxt'),B('Reiniciar misiones','b-gray','mreset'),B('Ir al tablero','b-turq','tab','board'),help];
+  else h=can('admin')?[out,B('Datos de ejemplo','b-blue','seed'),B('Vaciar todo','b-red','wipe'),B('Exportar JSON','b-turq','json'),help]:[out,B('Reloj de simulación','b-blue','clock'),B(S.cfg.sound?'Silenciar alertas':'Activar alertas','b-olive','sound'),B('Ir al tablero','b-turq','tab','board'),help];
+  $('#actions').innerHTML=h.join('');
+}
+
+/* ================= tarjetas ================= */
+function hint(o,nv){
+  if(nv==='PREPARACION')return'TOCAR → SIN ASIGNAR';
+  if(nv==='SIN_ASIGNAR')return'TOCAR → ASIGNARME';
+  if(nv==='ASIGNADO')return'TOCAR → ENTREGADO';
+  if(nv==='ROJO')return'TOCAR → RETIRADO';
+  return'';
+}
+function timerHTML(o){
+  if(o.estado==='ENTREGADO')return`<span data-t0="${o.t.entregado}">${fmtDur(simNow()-o.t.entregado)}</span>`;
+  if(o.estado==='RETIRADO')return`<span>${fmtDur(o.t.retirado-o.t.entregado)}</span>`;
+  return`<span data-tr="${o.t.registrado}">${fmtDur(simNow()-o.t.registrado)}</span>`;
+}
+function whoText(o,nv){
+  const h=ts=>ts?' · '+fmtTime(ts).slice(0,5):'';
+  if(nv==='ASIGNADO')return'Asignado: '+esc(o.asignado)+h(o.t.asignado);
+  if(nv==='VERDE'||nv==='AMARILLO'||nv==='ROJO')return'Entregó: '+esc(o.entregado_por||o.asignado||'—')+h(o.t.entregado);
+  if(nv==='RETIRADO')return'Retiró: '+esc(o.retirado_por||'—')+h(o.t.retirado);
+  return'Registró: '+esc(o.creado_por||'—')+h(o.t.registrado);
+}
+function cardHTML(o,now){
+  const nv=nivel(o,now),ro=!can('adv'),h=hint(o,nv);
+  const rem=(nv==='VERDE'||nv==='AMARILLO')?`<div class="c-state" data-rem="${o.t.entregado}"${nv==='AMARILLO'?' data-pre="1"':''}>RETIRO EN ${Math.max(0,Math.ceil(S.cfg.rojo-(now-o.t.entregado)/MIN))} MIN</div>`:`<div class="c-state">${h||'&nbsp;'}</div>`;
+  return`<div class="card k-${nv}${ro?' ro':''}" data-act="order" data-arg="${o.uid}">
+    <div class="c-top"><span>#${esc(o.id)}</span><span>Piso ${o.piso}</span></div>
+    <div class="c-room">${o.hab}</div>
+    ${rem}
+    <div class="c-meta"><span>${whoText(o,nv)}</span><span class="c-time">${timerHTML(o)}</span></div>
+    <div class="c-btns">${o.stack.length&&(can('adv')||can('reg'))&&nv!=='RETIRADO'?`<button class="mini" data-act="undo" data-arg="${o.uid}">◄ Atrás</button>`:''}<button class="mini" data-act="detail" data-arg="${o.uid}">Detalle</button></div>
+  </div>`;
+}
+function rcardHTML(o,now){
+  const nv=nivel(o,now);let act=hint(o,nv);
+  if(nv==='VERDE'||nv==='AMARILLO')act=`<span data-rem="${o.t.entregado}"${nv==='AMARILLO'?' data-pre="1"':''}>${nv==='AMARILLO'?'PRE-AVISO · ':''}RETIRO EN ${Math.max(0,Math.ceil(S.cfg.rojo-(now-o.t.entregado)/MIN))} MIN</span>`;
+  if(nv==='RETIRADO')act='RETIRADO · TOCAR PARA VER';
+  return`<div class="rcard k-${nv}" data-act="order" data-arg="${o.uid}">
+    <div class="r-top"><span>#${esc(o.id)} · Piso ${o.piso}</span><span class="r-timer">${timerHTML(o)}</span></div>
+    <div class="r-room">${o.hab}</div>
+    <div class="r-state">${NV[nv].label}</div>
+    <div class="r-who">${whoText(o,nv)}&nbsp;</div>
+    ${o.stack.length&&can('adv')&&nv!=='RETIRADO'?`<button class="mini r-undo" data-act="undo" data-arg="${o.uid}" title="Atrás">◄</button>`:''}
+    <button class="mini r-info" data-act="detail" data-arg="${o.uid}" title="Detalle">i</button>
+    <div class="r-act">${act}</div>
+  </div>`;
+}
+
+/* ================= filtros compartidos ================= */
+function counts(){const now=simNow(),c={};LEVELS.forEach(k=>c[k]=0);S.orders.forEach(o=>{if(o.estado!=='ANULADA')c[nivel(o,now)]++});return c}
+function stripHTML(){
+  const c=counts();
+  return`<div class="strip">${LEVELS.map(k=>`<button class="chip k-${k}${UI.filt[k]?'':' off'}" data-act="filt" data-arg="${k}">${NV[k].chip} <b>${c[k]}</b></button>`).join('')}
+  <span class="grow"></span><input id="q" placeholder="Buscar hab. o ID" value="${esc(UI.q)}" inputmode="numeric" autocomplete="off">
+  <button class="btn ${UI.mine?'b-green':'b-gray'}" data-act="mine">Solo mías</button>
+  <button class="btn b-olive" data-act="filtAll">Todos</button>
+  <button class="btn b-blue" data-act="filtDef">Sin retirados</button></div>`;
+}
+function visible(){
+  const now=simNow(),u=cur(),q=UI.q.trim();
+  return S.orders.filter(o=>o.estado!=='ANULADA'&&UI.filt[nivel(o,now)]&&
+    (!UI.mine||o.asignado===u.name||o.entregado_por===u.name||o.retirado_por===u.name)&&
+    (!q||String(o.hab).includes(q)||o.id.includes(q)));
+}
+function bindQ(fill){const q=$('#q');if(q)q.oninput=e=>{UI.q=e.target.value;fill()}}
+
+/* ================= vista: tablero ================= */
+RENDER.board=function(){
+  $('#v-board').innerHTML=stripHTML()+'<div class="cols" id="bd"></div>';
+  fillBoard();bindQ(fillBoard);
+};
+function fillBoard(){
+  const now=simNow(),vis=visible(),keys=LEVELS.filter(k=>UI.filt[k]),bd=$('#bd');
+  if(!bd)return;
+  if(!keys.length){bd.innerHTML='<div class="empty" style="grid-column:1/-1">Seleccione al menos un estado en los filtros</div>';return}
+  bd.innerHTML=keys.map(k=>{
+    const L=vis.filter(o=>nivel(o,now)===k).sort((a,b)=>(a.t.entregado||a.t.registrado)-(b.t.entregado||b.t.registrado));
+    return`<div class="col"><div class="col-h k-${k}"><span>${NV[k].chip}</span><span>${L.length}</span></div>
+      <div class="col-b">${L.length?L.map(o=>cardHTML(o,now)).join(''):'<div class="empty">Sin órdenes</div>'}</div></div>`;
+  }).join('');
+}
+
+/* ================= vista: runner (simplificada) ================= */
+const RUN_ORDER={ROJO:0,AMARILLO:1,VERDE:2,ASIGNADO:3,SIN_ASIGNAR:4,PREPARACION:5,RETIRADO:6};
+RENDER.runner=function(){
+  $('#v-runner').innerHTML=stripHTML()+'<div class="rgrid" id="rg"></div>';
+  fillRunner();bindQ(fillRunner);
+};
+function fillRunner(){
+  const now=simNow(),vis=visible(),rg=$('#rg');if(!rg)return;
+  vis.sort((a,b)=>{const na=nivel(a,now),nb=nivel(b,now);if(na!==nb)return RUN_ORDER[na]-RUN_ORDER[nb];
+    if(na==='ROJO'||na==='AMARILLO')return b.piso-a.piso||a.hab-b.hab;return a.t.registrado-b.t.registrado});
+  rg.innerHTML=vis.length?vis.map(o=>rcardHTML(o,now)).join(''):'<div class="empty" style="grid-column:1/-1;font-size:28px">No hay órdenes con estos filtros</div>';
+}
+
+/* ================= vista: operadora ================= */
+RENDER.op=function(){
+  const hv=UI.opHab,val=validarHab(hv);
+  let pt='';if(hv&&val.ok)pt=` · PISO ${val.piso}`;else if(hv&&hv.length>=3)pt=' · '+val.msg;
+  const m=UI.opMsg,now=simNow();
+  const mine=S.orders.filter(o=>o.estado!=='ANULADA').sort((a,b)=>b.t.registrado-a.t.registrado).slice(0,40);
+  const due=S.orders.filter(o=>{const n=nivel(o,now);return n==='ROJO'||n==='AMARILLO'}).sort((a,b)=>a.t.entregado-b.t.entregado);
+  const key=(l,a,bg,cls)=>{cls=(cls||'')+(String(l).length>1&&l!=='⌫'?' sm':'');return`<button data-act="opk" data-arg="${a}"${bg?` style="background:${bg}"`:''}${cls.trim()?` class="${cls.trim()}"`:''}>${l}</button>`};
+  $('#v-op').innerHTML=`<div class="op">
+  <div class="op-left"><div class="op-title">Nueva orden de Room Service</div>
+   <div class="fld ${UI.opF==='id'?'act':''}" data-act="opf" data-arg="id"><label>ID PEDIDO SYMPHONY</label><div class="val">${UI.opId?'#'+esc(UI.opId):''}</div></div>
+   <div class="fld ${UI.opF==='hab'?'act':''}" data-act="opf" data-arg="hab"><label>HABITACIÓN${esc(pt)}</label><div class="val">${esc(hv)}</div></div>
+   <div class="opmsg ${m?m.t:''}">${m?esc(m.msg):'&nbsp;'}</div>
+   <div class="pad">${[7,8,9].map(n=>key(n,n)).join('')}${key('⌫','bs',C.red)}${[4,5,6].map(n=>key(n,n)).join('')}${key('Siguiente','next',C.blue)}${[1,2,3].map(n=>key(n,n)).join('')}${key('Limpiar','clr',C.gray)}${key('0',0,'','')}${key('ENVIAR ORDEN','send',C.green,'wide')}</div>
+  </div>
+  <div class="op-right">
+   <div class="box"><h2><span>Órdenes recientes</span><span>${mine.length}</span></h2><div class="tbl-wrap"><table class="t"><thead><tr><th>ID</th><th>Hab.</th><th>Piso</th><th>Registro</th><th>Estado</th><th></th></tr></thead><tbody>
+   ${mine.map(o=>{const nv=nivel(o,now),ok=PERM[cur().rol].anular==='all'||(PERM[cur().rol].anular==='prep'&&o.estado==='PREPARACION');
+     return`<tr class="clk" data-act="detail" data-arg="${o.uid}"><td class="num">#${esc(o.id)}</td><td class="num">${o.hab}</td><td>${o.piso}</td><td class="num">${fmtTime(o.t.registrado)}</td><td>${pill(nv)}</td><td>${ok&&nv!=='RETIRADO'?`<button class="mini" data-act="anular" data-arg="${o.uid}">Anular</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="6" class="empty">Sin órdenes</td></tr>'}
+   </tbody></table></div></div>
+   <div class="box"><h2><span>Vajilla por retirar (llamar a la habitación)</span><span>${due.length}</span></h2><div class="tbl-wrap"><table class="t"><thead><tr><th>Hab.</th><th>Piso</th><th>En habitación</th><th>Estado</th></tr></thead><tbody>
+   ${due.map(o=>`<tr class="clk" data-act="detail" data-arg="${o.uid}"><td class="num">${o.hab}</td><td>${o.piso}</td><td class="num">${fmtDur(now-o.t.entregado)}</td><td>${pill(nivel(o,now))}</td></tr>`).join('')||'<tr><td colspan="4" class="empty">Nada pendiente de retiro</td></tr>'}
+   </tbody></table></div></div>
+  </div></div>`;
+};
+
+/* ================= diálogo de detalle de orden ================= */
+function showOrder(uid){
+  const o=getOrder(uid);if(!o)return;
+  const now=simNow(),nv=nivel(o,now),m=minEnHab(o,now);
+  const ev=S.log.filter(l=>l.uid===o.uid).sort((a,b)=>a.ts-b.ts);
+  const kv=[['ID Symphony','#'+o.id],['Habitación',o.hab+' (piso '+o.piso+')'],['Estado',NV[nv].label],
+    ['Registrada',fmtTime(o.t.registrado)+' · '+esc(o.creado_por||'—')],
+    ['Asignada a',o.asignado?esc(o.asignado)+' · '+fmtTime(o.t.asignado):'—'],
+    ['Entregada',o.t.entregado?esc(o.entregado_por||'—')+' · '+fmtTime(o.t.entregado):'—'],
+    ['En habitación',m==null?'—':fmtMin(m)],
+    ['Retirada',o.t.retirado?esc(o.retirado_por||'—')+' · '+fmtTime(o.t.retirado)+(o.anticipado?' (retiro anticipado)':''):'—']];
+  const u=cur(),pa=PERM[u.rol].anular;
+  const canAnular=(pa==='all'||(pa==='prep'&&o.estado==='PREPARACION'))&&o.estado!=='RETIRADO'&&o.estado!=='ANULADA';
+  const btns=[];
+  if(o.stack.length&&(can('adv')||can('reg'))&&o.estado!=='RETIRADO')btns.push({label:o.estado==='ANULADA'?'Restaurar orden':'◄ Atrás (deshacer)',bg:C.blue,fn:()=>{undoOrder(o.uid);toast('Cambio revertido','ok');render()}});
+  if(canAnular)btns.push({label:'Anular orden',bg:C.red,fn:()=>confirmDlg('Anular orden',`¿Anular la orden #${esc(o.id)} (hab. ${o.hab})?`,'Sí, anular',()=>{anularOrder(o.uid);toast('Orden anulada','ok');render()},C.red)});
+  btns.push({label:'Cerrar',bg:C.gray});
+  dlg({title:`Orden #${o.id} · Hab. ${o.hab}`,body:`<div class="kv">${kv.map(([a,b])=>`<b>${a}</b><span>${b}</span>`).join('')}</div>
+   <table><thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th><th>Cambio</th></tr></thead><tbody>
+   ${ev.map(l=>`<tr><td>${fmtTime(l.ts)}</td><td>${esc(l.user)}</td><td>${esc(l.accion)}</td><td>${esc(NV[l.de]?NV[l.de].chip:l.de)}${l.de?' → ':''}${esc(NV[l.a]?NV[l.a].chip:l.a)}</td></tr>`).join('')}</tbody></table>`,buttons:btns});
+}
+function roomInfo(hab){
+  const L=S.orders.filter(o=>o.hab===+hab&&o.estado!=='ANULADA').sort((a,b)=>b.t.registrado-a.t.registrado),now=simNow();
+  dlg({title:`Habitación ${hab} · Piso ${Math.floor(hab/100)}`,body:L.length?`<table><thead><tr><th>ID</th><th>Estado</th><th>Registro</th><th>En hab.</th><th></th></tr></thead><tbody>${L.map(o=>`<tr><td>#${esc(o.id)}</td><td>${pill(nivel(o,now))}</td><td>${fmtTime(o.t.registrado)}</td><td>${fmtMin(minEnHab(o,now))}</td><td><button class="mini" style="background:#336699;color:#fff;border:0;padding:6px 12px;cursor:pointer" data-act="detail" data-arg="${o.uid}">Detalle</button></td></tr>`).join('')}</tbody></table>`:'Sin órdenes registradas en esta habitación.',
+    buttons:[can('reg')?{label:'Nueva orden aquí',bg:C.green,fn:()=>{UI.opHab=String(hab);UI.opId='';UI.opF='id';UI.opMsg=null;UI.tab='op';render()}}:null,{label:'Cerrar',bg:C.gray}].filter(Boolean)});
+}
+/* ================= pestaña: guía de aprendizaje ================= */
+const GSUBS=[['concepto','1 · Qué es y qué resuelve'],['flujo','2 · Recorrido de una orden'],['roles','3 · Roles y permisos'],['mision','4 · Misiones para explorar'],['interno','5 · Cómo funciona por dentro'],['guion','6 · Guion de demostración'],['preguntas','7 · Preguntas de supervisores']];
+const gDone=()=>{try{return JSON.parse(store.get('riss_guide_done')||'[]')}catch(e){return[]}};
+const goTab=(k,after)=>()=>{
+  if(!PERM[cur().rol].tabs.includes(k)){toast('Esta misión necesita otro rol: cierre sesión y entre como Admin','err');return}
+  UI.tab=k;if(after)after();render();
+};
+const MISSIONS=[
+  {id:'m1',t:'Registrar una orden',d:'En Operadora escriba un ID (ej. 99001) y una habitación (ej. 1204) con el teclado y toque ENVIAR ORDEN. Pruebe también repetir el ID y escribir la habitación 1299: la app debe rechazarlos con un mensaje.',go:goTab('op'),l:'Ir a Operadora'},
+  {id:'m2',t:'Ver la orden en el Tablero',d:'Su orden aparece en la columna EN PREPARACIÓN (blanco). Cada tarjeta muestra ID, piso, habitación, estado, la cuenta responsable y un contador.',go:goTab('board',()=>ACT.filtDef()),l:'Ir al Tablero'},
+  {id:'m3',t:'Avanzar estados con un toque',d:'Toque la tarjeta: blanco → gris → azul (queda el nombre de su cuenta) → verde. Luego cierre sesión (toque su nombre en la barra dorada), entre con otra cuenta de Runner y repita con otra orden: el nombre cambia.',go:goTab('runner'),l:'Ir a Runner'},
+  {id:'m4',t:'Acelerar el tiempo',d:'Elija ×600 (10 minutos por segundo). Una orden entregada pasa de verde a amarillo (pre-aviso) y a rojo (recolección), con sonido. Use «+15 min» para saltar el reloj.',go:()=>ACT.clock(),l:'Abrir el reloj'},
+  {id:'m5',t:'Retirar la vajilla',d:'Toque una tarjeta roja: pasa a RETIRADO (negro). Toque una verde: la app pide confirmación porque es un retiro anticipado.',go:goTab('board',()=>ACT.viewFilt('ROJO')),l:'Ver las rojas'},
+  {id:'m6',t:'Corregir errores',d:'Toque «◄ Atrás» en una tarjeta o «Deshacer último» en la barra inferior. En «Detalle» puede anular una orden y después restaurarla.',go:goTab('board',()=>ACT.filtDef()),l:'Ir al Tablero'},
+  {id:'m7',t:'Usar los filtros',d:'Active y desactive estados, busque por habitación o ID y use «Solo mías». Por defecto se ocultan los retirados; «Todos» los muestra.',go:goTab('board',()=>ACT.filtAll()),l:'Mostrar todos'},
+  {id:'m8',t:'Recorrer la base de datos',d:'Visite Resumen, Órdenes (toque una fila para ver su historial), Mapa de pisos (las 187 habitaciones) y Bitácora (cada acción con hora y cuenta).',go:goTab('db',()=>{UI.sub='resumen'}),l:'Ir a Base de datos'},
+  {id:'m9',t:'Preguntarle al asistente',d:'Pruebe: «¿Qué hay que retirar ahora?», «cómo va la 1204», «piso 12», «tiempo promedio de retención». Compare cada respuesta con el Tablero.',go:goTab('ai'),l:'Ir al Asistente'},
+  {id:'m10',t:'Cambiar las reglas del semáforo',d:'En Configuración baje la recolección (rojo) a 30 min: los colores cambian solos porque se calculan en vivo. Después vuelva a 60.',go:goTab('cfg'),l:'Ir a Configuración'},
+  {id:'m11',t:'Probar los permisos',d:'Entre como Operadora e intente avanzar una tarjeta (no puede). Entre como Runner y compruebe que no existen la sección «Usuarios» ni Configuración.',go:()=>ACT.logout(),l:'Cerrar sesión'},
+  {id:'m12',t:'Exportar los datos',d:'Descargue el CSV de órdenes y ábralo en Excel: es la prueba de que la información sale limpia y se puede analizar fuera de la app.',go:()=>ACT.csv(),l:'Descargar CSV'}
+];
+const GUIDE={
+concepto:()=>`<h2>¿Qué es y qué problema resuelve?</h2>
+<p>Hoy la vajilla de Room Service se entrega sin registro y se recoge sin aviso. Nadie es dueño del ciclo completo, el tablero de imanes no lo mueve nadie y Amas de Llaves retira platos sin avisar. Resultado: falsas alarmas, vajilla retenida durante horas y pérdidas.</p>
+<p>Esta aplicación es el <b>tablero digital que reemplaza los imanes</b>: cada orden tiene un estado que todos ven, se cambia con un solo toque y un reloj arranca en el momento exacto de la entrega.</p>
+<div class="tip">Idea central, en una frase: <b>una orden, una cuenta responsable por etapa y un reloj que empieza cuando se entrega.</b></div>
+<h3>Qué se rastrea</h3>
+<ul><li>La <b>vajilla</b>, no al empleado.</li><li>La clave de cada orden es <b>ID Symphony + habitación + piso</b> (el piso se calcula solo a partir de la habitación).</li><li>Las 187 habitaciones del hotel están validadas: pisos 7 al 19 (11 por piso), 20 al 24 (8) y 25 (4).</li><li>No guarda datos del huésped ni el detalle del pedido: eso vive en Symphony.</li></ul>
+<h3>Qué no hace todavía</h3>
+<ul><li>No se conecta a Symphony: el ID se escribe a mano.</li><li>No comparte datos entre equipos distintos: es un prototipo y los datos viven en el navegador.</li><li>No define qué debe hacer Amas de Llaves si encuentra vajilla: es una decisión pendiente de gerencia.</li></ul>`,
+flujo:()=>`<h2>El recorrido de una orden</h2>
+<table><thead><tr><th>Paso</th><th>Estado y color</th><th>Quién lo cambia</th><th>Qué ocurre</th></tr></thead><tbody>
+<tr><td>1</td><td><span class="sw k-PREPARACION">EN PREPARACIÓN</span> blanco</td><td>Operadora, al enviar la orden</td><td>Aparece al instante en el tablero y en la vista de los runners.</td></tr>
+<tr><td>2</td><td><span class="sw k-SIN_ASIGNAR">SIN ASIGNAR</span> gris</td><td>Equipo de Room Service, con un toque</td><td>Confirma que la orden fue vista y espera quien la lleve.</td></tr>
+<tr><td>3</td><td><span class="sw k-ASIGNADO">ASIGNADO</span> azul</td><td>Un runner, con un toque</td><td>Queda el nombre de su cuenta en la tarjeta.</td></tr>
+<tr><td>4</td><td><span class="sw k-VERDE">ENTREGADO</span> verde</td><td>El runner, al entregar</td><td><b>Arranca el contador desde 0:00.</b> Es la única hora que cuenta para el semáforo.</td></tr>
+<tr><td>5</td><td><span class="sw k-AMARILLO">PRE-AVISO</span> amarillo</td><td>Automático</td><td>Del minuto ${S.cfg.amarillo} al ${S.cfg.rojo}: avisa que pronto hay que retirar.</td></tr>
+<tr><td>6</td><td><span class="sw k-ROJO">RECOLECCIÓN</span> rojo</td><td>Automático</td><td>Desde el minuto ${S.cfg.rojo}: hay que ir a retirar la vajilla. Suena una alerta.</td></tr>
+<tr><td>7</td><td><span class="sw k-RETIRADO">RETIRADO</span> negro</td><td>Un runner, con un toque en rojo</td><td>Cierra la orden y sale de la vista por defecto. Queda guardado el tiempo total en habitación.</td></tr>
+</tbody></table>
+<h3>Reglas que conviene recordar</h3>
+<ul><li>Verde de 0 a ${S.cfg.amarillo} min, amarillo de ${S.cfg.amarillo} a ${S.cfg.rojo} y rojo desde ${S.cfg.rojo}. Ambos límites se cambian en Configuración.</li><li><b>Retiro anticipado:</b> si el huésped termina antes, un toque en verde o amarillo pide confirmación y la orden queda marcada como anticipada.</li><li><b>Atrás:</b> cada tarjeta deshace su último cambio; «Deshacer último» revierte la última acción de todo el sistema.</li><li><b>Anular:</b> una orden registrada por error se anula y se puede restaurar desde su detalle.</li><li>No se permiten IDs duplicados ni habitaciones inexistentes.</li></ul>`,
+roles:()=>`<h2>Roles y permisos</h2>
+<table><thead><tr><th>Rol</th><th>Puede</th><th>No puede</th></tr></thead><tbody>
+<tr><td><b>Operadora</b></td><td>Registrar órdenes, anular las que siguen en preparación, ver el tablero, la base de datos (sin cuentas) y el asistente.</td><td>Cambiar estados, ver Configuración o cuentas.</td></tr>
+<tr><td><b>Runner</b> (salonero)</td><td>Avanzar estados con un toque, deshacer, usar la vista simplificada, ver el tablero y la base de datos (sin cuentas).</td><td>Registrar órdenes, ver Configuración o cuentas.</td></tr>
+<tr><td><b>Supervisor A&amp;B</b></td><td>Todo lo operativo, más Configuración (reloj, umbrales, sonido) y la lista de cuentas sin PIN.</td><td>Crear o borrar cuentas, importar o exportar la base.</td></tr>
+<tr><td><b>Administrador</b></td><td>Todo, incluida la gestión de cuentas y PIN, la importación y exportación y cargar o vaciar datos.</td><td>—</td></tr>
+</tbody></table>
+<div class="tip">Cada acción queda en la bitácora con la hora y la cuenta, por eso cada persona entra con su propio PIN. Amas de Llaves no tiene acceso al sistema.</div>`,
+mision:()=>{
+  const d=gDone(),n=MISSIONS.filter(m=>d.includes(m.id)).length;
+  return`<h2>Misiones para explorar (${n} de ${MISSIONS.length})</h2>
+<p>La mejor forma de entenderlo es usarlo. Haga las misiones en orden, con una sesión de Admin: cada botón azul lo lleva a la pantalla correcta y el cuadro verde marca lo que ya hizo.</p>
+${MISSIONS.map((m,i)=>`<div class="msn ${d.includes(m.id)?'done':''}"><button class="ck" data-act="mdone" data-arg="${m.id}" title="Marcar como hecha">${d.includes(m.id)?'✓':''}</button><div class="tx"><b>${i+1}. ${m.t}</b><br>${m.d}</div><button class="go" data-act="mgo" data-arg="${m.id}">${m.l}</button></div>`).join('')}`;
+},
+interno:()=>`<h2>Cómo funciona por dentro</h2>
+<ul><li><b>Un solo archivo</b> (index.html) con HTML, CSS y JavaScript. No necesita servidor ni instalación.</li>
+<li><b>Los datos viven en el navegador</b> (almacenamiento local): órdenes, cuentas, bitácora y configuración. Por eso cada equipo tiene su propia copia; las pestañas del mismo navegador se sincronizan solas.</li>
+<li><b>Cada orden guarda su estado y la hora de cada paso.</b> El color verde, amarillo o rojo no se guarda: se calcula en vivo comparando «ahora menos la hora de entrega» con los umbrales. Por eso cambiar los umbrales recolorea todo al instante.</li>
+<li><b>Reloj de simulación:</b> la app usa su propio reloj. Acelerarlo multiplica la velocidad del tiempo (×600 equivale a 10 minutos por segundo) sin tocar el reloj real del equipo.</li>
+<li><b>Atrás:</b> cada orden guarda una pila de «fotos» de sus estados anteriores y Atrás restaura la última.</li>
+<li><b>Bitácora:</b> cada registro, avance, deshacer y anulación queda con hora, cuenta y cambio de estado.</li>
+<li><b>Asistente IA:</b> un motor local con reglas que consulta la base; y, si se agrega una clave, Claude responde preguntas abiertas recibiendo una copia de la base (sin cuentas ni PIN).</li>
+<li><b>Pantalla:</b> el diseño es de 1920×1080 y se escala a cualquier ventana; en un teléfono cambia a vertical.</li></ul>
+<div class="tip"><b>Dicho con honestidad:</b> los PIN sirven para identificar a la persona, no son seguridad real (se guardan sin cifrar en el navegador). Para producción hace falta un servidor con base de datos compartida y autenticación.</div>`,
+guion:()=>`<h2>Guion de demostración (unos 7 minutos)</h2>
+<p><b>Antes de empezar:</b> en Configuración toque «Datos de ejemplo», deje la velocidad en ×1 y entre como Admin.</p>
+<ol>
+<li><b>El problema (30 s).</b> «Hoy los imanes no los mueve nadie y la vajilla desaparece.» Muestre el Tablero con las columnas de colores.</li>
+<li><b>Registro (1 min).</b> En Operadora cree la orden 1204. Muestre que rechaza un ID repetido y una habitación que no existe.</li>
+<li><b>Un toque por paso (1 min).</b> Entre como Ana y avance la orden: blanco, gris, azul con su nombre, verde.</li>
+<li><b>Vista Runner (1 min).</b> «Esto es lo único que ve un salonero: tarjetas grandes y un toque.»</li>
+<li><b>El reloj (1 min).</b> Active ×600: verde, amarillo, rojo y la alerta sonora. Diga que ese es el momento de ir a retirar.</li>
+<li><b>Cierre y errores (30 s).</b> Retire la roja, muestre «◄ Atrás» y los filtros (retirados ocultos por defecto).</li>
+<li><b>Base de datos (1 min).</b> Resumen con promedios, Mapa de pisos y Bitácora: «todo queda registrado».</li>
+<li><b>Asistente (30 s).</b> Pregunte «¿Qué hay que retirar ahora?».</li>
+<li><b>Cierre (30 s).</b> Diga qué es prototipo y qué falta (vea la sección 7).</li></ol>`,
+preguntas:()=>`<h2>Preguntas que pueden hacer los supervisores</h2>
+<table><thead><tr><th>Pregunta</th><th>Respuesta honesta</th></tr></thead><tbody>
+<tr><td>¿Se conecta con Symphony?</td><td>No. El ID se escribe a mano. Integrarlo requiere al proveedor o a TI del hotel.</td></tr>
+<tr><td>¿Funciona en varios dispositivos a la vez?</td><td>Hoy no: cada navegador tiene su copia. Para producción se necesita un servidor con base de datos compartida.</td></tr>
+<tr><td>¿Qué pasa si el huésped termina antes del minuto ${S.cfg.rojo}?</td><td>Un toque en verde o amarillo pide confirmación y registra un retiro anticipado.</td></tr>
+<tr><td>¿Y si alguien toca por error?</td><td>«◄ Atrás» o «Deshacer último». Además todo queda en la bitácora.</td></tr>
+<tr><td>¿Mide la eficiencia de cada empleado?</td><td>Registra la cuenta de cada paso para tener trazabilidad. No hay rankings ni puntajes; usar esos datos para evaluar sería una decisión de gerencia.</td></tr>
+<tr><td>¿Quién retira la vajilla?</td><td>El equipo de Room Service cuando una orden pasa a rojo. Falta que gerencia decida qué hace Amas de Llaves si encuentra vajilla en un pasillo.</td></tr>
+<tr><td>¿Por qué ${S.cfg.amarillo} y ${S.cfg.rojo} minutos?</td><td>Son valores configurables que se pueden ajustar con la operación real.</td></tr>
+<tr><td>¿Qué datos del huésped guarda?</td><td>Ninguno. Solo ID Symphony, habitación, piso y las horas de cada paso.</td></tr>
+<tr><td>¿Qué tan seguro es?</td><td>Es un prototipo: los PIN identifican a la persona pero no cifran nada. Producción exige autenticación real.</td></tr>
+</tbody></table>
+<h3>Qué falta para pasar a producción</h3>
+<ul><li>Servidor y base de datos compartida entre pantallas.</li><li>Autenticación segura de cuentas.</li><li>Integración (o carga automática) del ID desde Symphony.</li><li>Acuerdo con gerencia sobre el rol de Amas de Llaves y sobre el uso de los datos por cuenta.</li><li>Prueba piloto en un turno real y ajuste de los minutos del semáforo.</li></ul>`
+};
+RENDER.guide=function(){$('#v-guide').innerHTML=`<div class="gd">${GUIDE[UI.gsub]()}</div>`};
+ACT.mdone=id=>{const d=gDone(),i=d.indexOf(id);if(i>=0)d.splice(i,1);else d.push(id);store.set('riss_guide_done',JSON.stringify(d));render()};
+ACT.mgo=id=>{const m=MISSIONS.find(x=>x.id===id);if(m)m.go()};
+ACT.mreset=()=>{store.set('riss_guide_done','[]');toast('Misiones reiniciadas','ok');render()};
+ACT.guideTxt=()=>{
+  const plain=h=>{const t=document.createElement('textarea');t.innerHTML=h.replace(/<\/(p|li|tr|h\d|div|ol|ul|table)>/g,'\n').replace(/<\/t[dh]>/g,' | ').replace(/<br\s*\/?>/g,'\n').replace(/<li>/g,'- ').replace(/<[^>]+>/g,'');return t.value.replace(/\n{3,}/g,'\n\n').trim()};
+  download('guia_control_de_vajilla.txt',GSUBS.map(([k,l])=>'=== '+l+' ===\n'+plain(GUIDE[k]())).join('\n\n\n'),'text/plain;charset=utf-8');
+  toast('Guía descargada','ok');
+};
+/* ================= vista: base de datos ================= */
+RENDER.db=function(){
+  const v=$('#v-db'),now=simNow(),f=RENDER['db_'+UI.sub];
+  v.innerHTML=f?f(now):'';
+  const q=$('#dbq');if(q)q.oninput=e=>{UI.dbq=e.target.value;fillDbOrders()};
+  const s=$('#dbst');if(s)s.onchange=e=>{UI.dbst=e.target.value;fillDbOrders()};
+  if(UI.sub==='ordenes')fillDbOrders();
+};
+RENDER.db_resumen=function(now){
+  const M=metrics(),mx=Math.max(1,...LEVELS.map(k=>M.by[k]));
+  const kp=(n,l,c)=>`<div class="kpi ${c||''}"><b>${n}</b><span>${l}</span></div>`;
+  const prep=M.by.PREPARACION+M.by.SIN_ASIGNAR+M.by.ASIGNADO;
+  const pis=Object.entries(M.pisos).sort((a,b)=>b[1]-a[1]||b[0]-a[0]).slice(0,10),pm=Math.max(1,...pis.map(x=>x[1]));
+  return`<div class="dbbody"><div class="pad-in">
+  <div class="kpis">${kp(M.total,'Órdenes totales')}${kp(M.activas,'Activas (sin retirar)')}${kp(prep,'En cocina / sin entregar')}${kp(M.by.VERDE+M.by.AMARILLO,'En habitación (verde + pre-aviso)')}
+  ${kp(M.by.ROJO,'En recolección (rojo)',M.by.ROJO?'k-ROJO':'')}${kp(M.by.RETIRADO,'Retiradas')}${kp(fmtMin(M.avgEnt),'Promedio registro → entrega')}${kp(fmtMin(M.avgRet),'Promedio de retención en habitación')}</div>
+  <div class="h2">Órdenes por estado</div><div class="bars">${LEVELS.map(k=>`<div class="br"><i>${NV[k].chip}</i><u class="k-${k}" style="width:${Math.max(4,M.by[k]/mx*620)}px"></u><em>${M.by[k]}</em></div>`).join('')}</div>
+  <div class="h2">Pisos con más vajilla en habitación</div><div class="bars">${pis.length?pis.map(([p,n])=>`<div class="br"><i>Piso ${p}</i><u style="width:${Math.max(4,n/pm*620)}px"></u><em>${n}</em></div>`).join(''):'<div class="empty" style="text-align:left">Sin vajilla entregada pendiente</div>'}</div>
+  <div class="h2">Reglas activas</div><div class="note">Pre-aviso (amarillo) desde el minuto ${S.cfg.amarillo} · Recolección (rojo) desde el minuto ${S.cfg.rojo} · Anuladas: ${M.anuladas} · Registros en bitácora: ${S.log.length}</div>
+  </div></div>`;
+};
+RENDER.db_ordenes=function(){
+  return`<div class="strip"><input id="dbq" placeholder="Buscar ID, habitación, piso o cuenta" value="${esc(UI.dbq)}" autocomplete="off" style="min-width:420px">
+  <select id="dbst"><option value="">Todos los estados</option>${[...LEVELS,'ANULADA'].map(k=>`<option value="${k}"${UI.dbst===k?' selected':''}>${NV[k].label}</option>`).join('')}</select></div>
+  <div class="tbl-wrap" id="dbt"></div>`;
+};
+function fillDbOrders(){
+  const t=$('#dbt');if(!t)return;
+  const now=simNow(),q=norm(UI.dbq.trim());
+  const L=S.orders.filter(o=>{const nv=nivel(o,now);
+    if(UI.dbst&&nv!==UI.dbst)return false;
+    if(!q)return true;
+    return[o.id,o.hab,'piso '+o.piso,o.asignado,o.entregado_por,o.retirado_por,o.creado_por].some(x=>norm(x||'').includes(q));
+  }).sort((a,b)=>b.t.registrado-a.t.registrado);
+  t.innerHTML=`<table class="t"><thead><tr><th>ID</th><th>Hab.</th><th>Piso</th><th>Estado</th><th>Registro</th><th>Asignada a</th><th>Entregó</th><th>Entrega</th><th>En hab.</th><th>Retiró</th><th>Retiro</th></tr></thead><tbody>
+  ${L.map(o=>`<tr class="clk" data-act="detail" data-arg="${o.uid}"><td class="num">#${esc(o.id)}</td><td class="num">${o.hab}</td><td>${o.piso}</td><td>${pill(nivel(o,now))}</td><td class="num">${fmtTime(o.t.registrado)}</td><td>${esc(o.asignado||'—')}</td><td>${esc(o.entregado_por||'—')}</td><td class="num">${fmtTime(o.t.entregado)}</td><td class="num">${fmtMin(minEnHab(o,now))}</td><td>${esc(o.retirado_por||'—')}</td><td class="num">${fmtTime(o.t.retirado)}</td></tr>`).join('')||'<tr><td colspan="11" class="empty">Sin resultados</td></tr>'}</tbody></table>`;
+}
+RENDER.db_mapa=function(now){
+  const lv={};S.orders.forEach(o=>{if(o.estado==='ANULADA'||o.estado==='RETIRADO')return;lv[o.hab]=nivel(o,now)});
+  const rows=FLOORS.slice().reverse().map(f=>`<div class="fmap-row"><span class="fl">P${f.piso}</span>${Array.from({length:f.n},(_,i)=>{const h=f.piso*100+i+1,k=lv[h]||'LIBRE';return`<div class="fcell k-${k}" data-act="room" data-arg="${h}">${h}</div>`}).join('')}</div>`).join('');
+  return`<div class="dbbody"><div class="fmap"><div class="legend">${['LIBRE',...LEVELS.slice(0,6)].map(k=>`<span class="k-${k}">${k==='LIBRE'?'SIN ORDEN ACTIVA':NV[k].chip}</span>`).join('')}</div>${rows}</div></div>`;
+};
+RENDER.db_bitacora=function(){
+  const L=S.log.slice(-400).reverse();
+  return`<div class="tbl-wrap"><table class="t"><thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th><th>Orden</th><th>Hab.</th><th>Cambio</th></tr></thead><tbody>
+  ${L.map(l=>`<tr class="clk" data-act="detail" data-arg="${l.uid}"><td class="num">${fmtTime(l.ts)}</td><td>${esc(l.user)}</td><td>${esc(l.accion)}</td><td class="num">#${esc(l.orden)}</td><td>${l.hab}</td><td>${esc(NV[l.de]?NV[l.de].chip:l.de)}${l.de?' → ':''}${esc(NV[l.a]?NV[l.a].chip:l.a)}</td></tr>`).join('')}</tbody></table></div>`;
+};
+RENDER.db_usuarios=function(){
+  if(!can('usersDb'))return'<div class="empty">Sin permiso para ver las cuentas</div>';
+  const adm=can('admin');
+  return`<div class="tbl-wrap"><table class="t"><thead><tr><th>Cuenta</th><th>Rol</th><th>PIN</th><th>Acciones registradas</th></tr></thead><tbody>
+  ${S.users.map(u=>`<tr><td>${esc(u.name)}</td><td>${ROLES[u.rol]}</td><td>${adm?esc(u.pin):'••••'}</td><td class="num">${S.log.filter(l=>l.user===u.name).length}</td></tr>`).join('')}</tbody></table></div>`;
+};
+
+/* ================= asistente IA ================= */
+const AI_CHIPS=['¿Qué hay que retirar ahora?','Resumen del turno','Pisos con más vajilla pendiente','Tiempo promedio de retención','¿Quién tiene órdenes asignadas?','Órdenes más lentas'];
+RENDER.ai=function(){
+  if(!UI.aiMsgs.length)UI.aiMsgs.push({r:'b',t:'Hola, soy el asistente del control de vajilla. Tengo acceso a toda la base de datos: órdenes, estados, tiempos, cuentas y bitácora. Pregúnteme, por ejemplo, por una habitación («¿cómo va la 1204?»), un piso, lo que hay que retirar o los promedios.'});
+  const mode=S.cfg.apiKey?'Claude (API) con acceso a la base de datos':'Motor local con acceso a la base de datos';
+  $('#v-ai').innerHTML=`<div class="strip"><span style="font-size:22px;font-weight:600">Asistente · ${mode}</span></div>
+  <div class="ai"><div class="ai-log" id="ailog">${UI.aiMsgs.map(m=>`<div class="msg ${m.r==='u'?'u':'b'}">${esc(m.t)}${m.acts?`<div class="acts">${m.acts.map(a=>`<button style="background:${C.blue}" data-act="${a.act}" data-arg="${esc(a.arg)}">${esc(a.label)}</button>`).join('')}</div>`:''}</div>`).join('')}${UI.aiBusy?'<div class="msg b">Consultando…</div>':''}</div>
+  <div class="ai-chips">${AI_CHIPS.map(c=>`<button data-act="aiQ" data-arg="${esc(c)}">${esc(c)}</button>`).join('')}</div>
+  <div class="ai-in"><input id="aiq" placeholder="Pregunte sobre órdenes, habitaciones, pisos, tiempos…" autocomplete="off"><button class="btn b-green" data-act="aiSend">Enviar</button></div></div>`;
+  const l=$('#ailog');l.scrollTop=l.scrollHeight;
+  const i=$('#aiq');i.onkeydown=e=>{if(e.key==='Enter')ACT.aiSend()};
+};
+function aiLocal(q){
+  const t=norm(q),now=simNow(),A=S.orders.filter(o=>o.estado!=='ANULADA'),M=metrics();
+  const line=o=>`• Hab. ${o.hab} (#${o.id}, piso ${o.piso}) — ${NV[nivel(o,now)].label}${o.t.entregado&&o.estado!=='RETIRADO'?`, ${Math.floor(minEnHab(o,now))} min en habitación`:''}${o.asignado?`, asignada a ${o.asignado}`:''}`;
+  if(/\bpin\b|contrasena|usuarios|cuentas de acceso/.test(t))return{text:'Por seguridad no tengo acceso a los PIN ni a la tabla de cuentas. Sí puedo consultar órdenes, estados y tiempos.'};
+  const nums=t.match(/\d{3,8}/g)||[];
+  for(const n of nums){
+    const byId=A.filter(o=>o.id===n.replace(/^0+/,''));
+    if(byId.length)return{text:byId.map(o=>`Orden #${o.id}\n${line(o)}\nRegistrada ${fmtTime(o.t.registrado)} por ${o.creado_por}. Entregó: ${o.entregado_por||'—'}. Retiró: ${o.retirado_por||'—'}.`).join('\n\n'),acts:[{label:'Ver detalle',act:'detail',arg:byId[0].uid}]};
+    const v=validarHab(n);
+    if(v.ok){const L=A.filter(o=>o.hab===v.hab);
+      return L.length?{text:`Habitación ${v.hab} (piso ${v.piso}):\n`+L.map(line).join('\n'),acts:[{label:'Ver habitación',act:'room',arg:v.hab}]}:{text:`La habitación ${v.hab} (piso ${v.piso}) no tiene órdenes registradas.`}}
+  }
+  const pm=t.match(/piso\s*(\d+)/);
+  if(pm&&!/mas|mayor|cuales/.test(t)){const L=A.filter(o=>o.piso===+pm[1]);return{text:L.length?`Piso ${pm[1]}: ${L.length} orden(es).\n`+L.map(line).join('\n'):`El piso ${pm[1]} no tiene órdenes registradas.`}}
+  if(/retirar|recolec|recoger|rojo|pendiente de retiro|ahora/.test(t)){
+    const R=A.filter(o=>nivel(o,now)==='ROJO').sort((a,b)=>b.piso-a.piso),Y=A.filter(o=>nivel(o,now)==='AMARILLO');
+    return{text:(R.length?`Hay ${R.length} habitación(es) para recolectar ya (≥ ${S.cfg.rojo} min), de piso alto a bajo:\n${R.map(line).join('\n')}`:'No hay recolecciones vencidas en este momento.')+(Y.length?`\n\nEn pre-aviso (≥ ${S.cfg.amarillo} min): ${Y.length}\n${Y.map(line).join('\n')}`:''),acts:R.length?[{label:'Ver en el tablero',act:'viewFilt',arg:'ROJO'}]:[]};
+  }
+  if(/pre.?aviso|amarillo/.test(t)){const Y=A.filter(o=>nivel(o,now)==='AMARILLO');return{text:Y.length?`En pre-aviso: ${Y.length}\n${Y.map(line).join('\n')}`:'No hay órdenes en pre-aviso.',acts:Y.length?[{label:'Ver en el tablero',act:'viewFilt',arg:'AMARILLO'}]:[]}}
+  if(/promedio|retencion|tiempo medio|cuanto tarda/.test(t))return{text:`Retención promedio (entrega → retiro): ${fmtMin(M.avgRet)}\nPromedio registro → entrega: ${fmtMin(M.avgEnt)}\nBase: ${M.by.RETIRADO} orden(es) retiradas.`};
+  if(/piso/.test(t)&&/(mas|mayor|pendiente|vajilla)/.test(t)){const p=Object.entries(M.pisos).sort((a,b)=>b[1]-a[1]||b[0]-a[0]);return{text:p.length?'Vajilla actualmente en habitaciones, por piso:\n'+p.map(([k,n])=>`• Piso ${k}: ${n}`).join('\n'):'No hay vajilla entregada pendiente de retiro.'}}
+  if(/quien|asignad|runner|cuenta|salonero|entreg/.test(t)){
+    const as=A.filter(o=>o.estado==='ASIGNADO');const by={};A.filter(o=>o.entregado_por).forEach(o=>by[o.entregado_por]=(by[o.entregado_por]||0)+1);
+    return{text:(as.length?`Órdenes asignadas por entregar:\n${as.map(o=>`• Hab. ${o.hab} → ${o.asignado}`).join('\n')}`:'No hay órdenes asignadas pendientes de entrega.')+(Object.keys(by).length?`\n\nEntregas registradas por cuenta:\n${Object.entries(by).map(([k,n])=>`• ${k}: ${n}`).join('\n')}`:'')};
+  }
+  if(/lent|mas tiempo|mayor tiempo|critic|peor/.test(t)){const L=A.filter(o=>o.estado==='ENTREGADO').sort((a,b)=>a.t.entregado-b.t.entregado).slice(0,5);return{text:L.length?'Mayor tiempo en habitación:\n'+L.map(line).join('\n'):'No hay órdenes entregadas en habitación.'}}
+  if(/retirad/.test(t)){const L=A.filter(o=>o.estado==='RETIRADO').sort((a,b)=>b.t.retirado-a.t.retirado).slice(0,6);return{text:`Retiradas: ${M.by.RETIRADO}\n`+L.map(line).join('\n')}}
+  if(/resumen|turno|cuant|estado|total|general|hola/.test(t))return{text:`Resumen (${fmtDT(now)}):\n${LEVELS.map(k=>`• ${NV[k].label}: ${M.by[k]}`).join('\n')}\n\nTotal: ${M.total} · Activas: ${M.activas} · Anuladas: ${M.anuladas}\nRetención promedio: ${fmtMin(M.avgRet)}`};
+  if(/ayuda|puedes|que sabes/.test(t))return{text:'Puedo consultar: una habitación («1204») o ID («#88410»), un piso («piso 12»), lo que hay que retirar, pre-avisos, promedios de tiempo, pisos con más vajilla, quién tiene asignadas órdenes, órdenes más lentas y el resumen general. Con una clave de Claude en Configuración respondo preguntas abiertas.'};
+  return{text:'No entendí la consulta. Pruebe con una habitación («1204»), un piso («piso 12»), «qué hay que retirar», «resumen» o «promedio de retención». Con una clave de Claude en Configuración puedo responder preguntas abiertas.'};
+}
+async function aiClaude(q){
+  const now=simNow();
+  const snap={ahora:fmtDT(now),umbrales_min:{preaviso_amarillo:S.cfg.amarillo,recoleccion_rojo:S.cfg.rojo},
+    metricas:metrics(),
+    ordenes:S.orders.map(o=>({id:o.id,hab:o.hab,piso:o.piso,estado:nivel(o,now),registrada:fmtTime(o.t.registrado),asignada_a:o.asignado,entrego:o.entregado_por,entregada:o.t.entregado?fmtTime(o.t.entregado):null,min_en_habitacion:o.t.entregado?Math.round(minEnHab(o,now)):null,retiro:o.retirado_por,retiro_anticipado:!!o.anticipado})),
+    bitacora_reciente:S.log.slice(-40).map(l=>`${fmtTime(l.ts)} ${l.user} ${l.accion} #${l.orden} hab ${l.hab} ${l.de}→${l.a}`)};
+  const system='Eres el asistente de la base de datos de control de vajilla de Room Service de un hotel. Estados: EN PREPARACIÓN → SIN ASIGNAR → ASIGNADO → ENTREGADO (verde 0–pre-aviso, amarillo pre-aviso–recolección, rojo desde recolección) → RETIRADO. No tienes acceso a cuentas ni PIN y no debes inventarlos. Responde en español, breve y solo con datos de la base JSON adjunta; si algo no está en los datos, dilo.\n\nBASE DE DATOS:\n'+JSON.stringify(snap);
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':S.cfg.apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:S.cfg.model||'claude-sonnet-5-5',max_tokens:900,system,messages:[...UI.aiHist.slice(-8),{role:'user',content:q}]})});
+  const d=await r.json();
+  if(!r.ok)throw new Error((d.error&&d.error.message)||('HTTP '+r.status));
+  return(d.content||[]).map(c=>c.text||'').join('').trim();
+}
+
+/* ================= vista: configuración ================= */
+RENDER.cfg=function(){
+  const adm=can('admin'),sp=S.clock.speed,sb=(v,l)=>`<button class="btn ${sp===v?'b-olive sel':'b-blue'}" data-act="speed" data-arg="${v}">${l}</button>`;
+  const stp=(lbl,key,val)=>`<div class="row"><span class="lbl">${lbl}</span><button class="btn b-gray" data-act="thr" data-arg="${key}:-5">−5</button><span class="val-big">${val}</span><button class="btn b-gray" data-act="thr" data-arg="${key}:5">+5</button><span>minutos</span></div>`;
+  $('#v-cfg').innerHTML=`<div class="cfg">
+  <h2>Reloj de simulación</h2>
+  <div class="row"><span class="lbl">Velocidad del tiempo</span>${sb(1,'×1 real')}${sb(10,'×10')}${sb(60,'×60 (1 s = 1 min)')}${sb(300,'×300')}${sb(600,'×600')}</div>
+  <div class="row"><span class="lbl">Adelantar el reloj</span>${[5,15,30,60].map(m=>`<button class="btn b-turq" data-act="jump" data-arg="${m}">+${m} min</button>`).join('')}</div>
+  <h2 style="margin-top:20px">Semáforo de retiro</h2>
+  ${stp('Pre-aviso (amarillo) desde el minuto','amarillo',S.cfg.amarillo)}${stp('Recolección (rojo) desde el minuto','rojo',S.cfg.rojo)}
+  <div class="row"><span class="lbl">Sonido de alertas</span><button class="btn ${S.cfg.sound?'b-green':'b-gray'}" data-act="sound">${S.cfg.sound?'ACTIVADO':'DESACTIVADO'}</button></div>
+  ${adm?`<h2 style="margin-top:20px">Cuentas de trabajo</h2>
+  <div class="row"><span class="lbl">Acceso rápido (demo) en la pantalla de inicio</span><button class="btn ${S.cfg.demo?'b-green':'b-gray'}" data-act="demoToggle">${S.cfg.demo?'VISIBLE':'OCULTO'}</button></div>
+  <div class="note">El acceso rápido muestra todas las cuentas y PIN antes de iniciar sesión. Ocúltelo cuando use el sistema con personal real.</div>
+  <div class="tbl-wrap" style="max-height:290px;margin-bottom:12px"><table class="t"><thead><tr><th>Cuenta</th><th>Rol</th><th>PIN</th><th></th></tr></thead><tbody>${S.users.map((u,i)=>`<tr><td>${esc(u.name)}</td><td>${ROLES[u.rol]}</td><td>${esc(u.pin)}</td><td><button class="mini" data-act="delUser" data-arg="${i}">Eliminar</button></td></tr>`).join('')}</tbody></table></div>
+  <div class="row"><input type="text" id="nu_n" placeholder="Nombre de la cuenta" style="min-width:300px"><input type="text" id="nu_p" placeholder="PIN (4 dígitos)" maxlength="4" inputmode="numeric" style="min-width:200px"><select id="nu_r">${Object.entries(ROLES).map(([k,l])=>`<option value="${k}"${k==='runner'?' selected':''}>${l}</option>`).join('')}</select><button class="btn b-green" data-act="addUser">Agregar cuenta</button></div>
+  <div class="opmsg" style="color:#ffd7a0">${esc(UI.cfgMsg)}&nbsp;</div>
+  `:`<div class="note" style="margin-top:20px">La gestión de cuentas y de los datos es solo para el administrador.</div>`}
+  <h2 style="margin-top:20px">Asistente IA (opcional)</h2>
+  <div class="note">Sin clave, el asistente usa su motor local sobre la base de datos. Con una clave de la API de Claude responde preguntas abiertas enviando una copia de la base de datos. La clave se guarda solo en este navegador; úsela únicamente en un equipo de confianza.</div>
+  <div class="row"><span class="lbl">Clave de API (Anthropic)</span><input type="password" id="ai_k" placeholder="sk-ant-…" value="${esc(S.cfg.apiKey)}" autocomplete="off"></div>
+  <div class="row"><span class="lbl">Modelo</span><input type="text" id="ai_m" value="${esc(S.cfg.model)}"><button class="btn b-green" data-act="saveAI">Guardar</button><button class="btn b-gray" data-act="clearKey">Quitar clave</button></div>
+  ${adm?`<h2 style="margin-top:20px">Datos</h2>
+  <div class="row"><button class="btn b-blue" data-act="seed" style="min-width:300px">Cargar datos de ejemplo</button><button class="btn b-red" data-act="wipe" style="min-width:300px">Vaciar todas las órdenes</button><button class="btn b-turq" data-act="json" style="min-width:260px">Exportar JSON</button><button class="btn b-green" data-act="import" style="min-width:260px">Importar JSON</button></div>`:''}
+  </div>`;
+};
+
+/* ================= acciones (ACT) ================= */
+const deny=m=>toast(m||'Su rol no tiene permiso para esta acción','err');
+ACT.tab=k=>{UI.tab=k;render()};
+ACT.sub=k=>{if(UI.tab==='guide')UI.gsub=k;else{if(k==='usuarios'&&!can('usersDb'))return deny('Las cuentas solo las ven supervisores y administradores');UI.sub=k}render()};
+ACT.filt=k=>{UI.filt[k]=UI.filt[k]?0:1;render()};
+ACT.filtAll=()=>{LEVELS.forEach(k=>UI.filt[k]=1);render()};
+ACT.filtDef=()=>{UI.filt=FILT_DEFAULT();render()};
+ACT.filtToggleRet=()=>{UI.filt.RETIRADO=UI.filt.RETIRADO?0:1;render()};
+ACT.mine=()=>{UI.mine=!UI.mine;render()};
+ACT.viewFilt=k=>{LEVELS.forEach(x=>UI.filt[x]=x===k?1:0);UI.mine=false;UI.q='';UI.tab='board';closeDlg();render()};
+ACT.goRojo=()=>ACT.viewFilt('ROJO');
+ACT.order=uid=>{
+  const o=getOrder(uid);if(!o)return;
+  if(!can('adv')){toast('Su rol solo puede consultar el tablero','err');return}
+  const nv=nivel(o);
+  if(nv==='RETIRADO'||nv==='ANULADA'){showOrder(uid);return}
+  if(nv==='VERDE'||nv==='AMARILLO'){
+    const m=Math.floor(minEnHab(o,simNow()));
+    confirmDlg('Retiro anticipado',`La habitación <b>${o.hab}</b> lleva ${m} min en habitación (la recolección es a los ${S.cfg.rojo} min).<br>¿Marcar como RETIRADO ahora?`,'Sí, retirado',()=>doAdvance(uid),C.green);return;
+  }
+  doAdvance(uid);
+};
+function doAdvance(uid){const r=advance(uid);if(r){toast(`Hab. ${r.o.hab} → ${NV[nivel(r.o)].label}`,'ok');render()}}
+ACT.undo=uid=>{if(!(can('adv')||can('reg')))return deny();undoOrder(uid)?toast('Cambio revertido','ok'):toast('Nada que deshacer','err');render()};
+ACT.undoLast=()=>{if(!(can('adv')||can('reg')))return deny();const o=undoLast();o?toast(`Deshecho: hab. ${o.hab} → ${NV[nivel(o)].label}`,'ok'):toast('No hay cambios para deshacer','err');render()};
+ACT.detail=uid=>{if(!getOrder(uid))return toast('Orden no encontrada','err');showOrder(uid)};
+ACT.room=h=>roomInfo(h);
+ACT.anular=uid=>{const o=getOrder(uid);if(!o)return;confirmDlg('Anular orden',`¿Anular la orden #${esc(o.id)} (hab. ${o.hab})?`,'Sí, anular',()=>{anularOrder(o.uid);toast('Orden anulada','ok');render()},C.red)};
+ACT.findRoom=()=>{
+  dlg({title:'Buscar habitación',body:'<label>Número de habitación o ID Symphony</label><input id="fr" inputmode="numeric" autocomplete="off" placeholder="Ej. 1204">',buttons:[
+    {label:'Buscar',bg:C.green,fn:()=>{UI.q=($('#fr')||{}).value||'';UI.filt=FILT_DEFAULT();LEVELS.forEach(k=>UI.filt[k]=1);render()}},
+    {label:'Limpiar búsqueda',bg:C.blue,fn:()=>{UI.q='';render()}},{label:'Cancelar',bg:C.gray}]});
+  setTimeout(()=>{const f=$('#fr');if(f)f.focus()},50);
+};
+/* operadora */
+ACT.opf=f=>{UI.opF=f;render()};
+ACT.opk=k=>{
+  if(!can('reg'))return deny();
+  const fld=UI.opF==='id'?'opId':'opHab',max=UI.opF==='id'?8:4;
+  if(/^\d$/.test(k)){if(UI[fld].length<max)UI[fld]+=k;UI.opMsg=null}
+  else if(k==='bs')UI[fld]=UI[fld].slice(0,-1);
+  else if(k==='clr'){UI.opId='';UI.opHab='';UI.opF='id';UI.opMsg=null}
+  else if(k==='next')UI.opF=UI.opF==='id'?'hab':'id';
+  else if(k==='send'){
+    const r=createOrder(UI.opId,UI.opHab);
+    if(r.ok){UI.opMsg={t:'ok',msg:`Orden #${r.o.id} · Hab. ${r.o.hab} (piso ${r.o.piso}) enviada a preparación`};UI.opId='';UI.opHab='';UI.opF='id';toast('Orden enviada al restaurante','ok')}
+    else{UI.opMsg={t:'err',msg:r.msg};toast(r.msg,'err')}
+  }
+  if(UI.tab==='op')RENDER.op();
+};
+/* barra de estado / ayuda / reloj */
+ACT.logout=()=>{sess.del('riss_user');closeDlg();showLogin()};
+ACT.clock=()=>openClock();
+function openClock(){
+  const sp=S.clock.speed;
+  dlg({title:'Reloj de simulación',body:`<div class="kv"><b>Hora simulada</b><span>${fmtDT(simNow())}</span><b>Velocidad</b><span>×${sp}${sp>1?' (acelerado)':' (tiempo real)'}</span></div>
+  <label>Velocidad</label><div class="tgrid">${[[1,'×1 real'],[10,'×10'],[60,'×60 · 1 s = 1 min'],[300,'×300'],[600,'×600']].map(([v,l])=>`<button class="${sp===v?'sel':''}" data-act="speed" data-arg="${v}">${l}</button>`).join('')}</div>
+  <label>Adelantar el reloj</label><div class="tgrid">${[5,15,30,60].map(m=>`<button data-act="jump" data-arg="${m}">+${m} min</button>`).join('')}</div>`,buttons:[{label:'Cerrar',bg:C.gray}]});
+}
+ACT.speed=v=>{setSpeed(+v);toast(+v>1?`Tiempo acelerado ×${v}`:'Tiempo real','ok');if($('#modal').classList.contains('on'))openClock();render()};
+ACT.jump=m=>{jumpClock(+m);toast(`Reloj adelantado ${m} min`,'ok');tick(true);if($('#modal').classList.contains('on'))openClock();render()};
+const HELP={
+  op:'Digite el ID del pedido de Symphony y la habitación (el piso se calcula solo) y toque ENVIAR ORDEN. La orden aparece al instante en el tablero como EN PREPARACIÓN. Puede usar el teclado del equipo: números, Retroceso, Tab (cambiar campo) y Enter.',
+  get board(){return 'Cada tarjeta avanza con un toque: EN PREPARACIÓN (blanco) → SIN ASIGNAR (gris) → ASIGNADO (azul, con la cuenta que tocó) → ENTREGADO (verde). Desde la entrega corre el contador: verde hasta el minuto '+S.cfg.amarillo+', amarillo (pre-aviso) hasta el '+S.cfg.rojo+' y rojo (recolección) después. Un toque en rojo la pasa a RETIRADO. «◄ Atrás» deshace un error. Los filtros muestran los estados que elija; por defecto se ocultan los retirados.'},
+  runner:'Vista simplificada: un toque en la tarjeta cambia el estado. Las de recolección salen primero, de piso alto a bajo. «◄» deshace el último cambio de esa orden e «i» muestra su detalle.',
+  db:'Base de datos general: resumen, todas las órdenes, mapa de las 187 habitaciones, bitácora de cada cambio y cuentas. Puede exportar a CSV/JSON e importar un JSON.',
+  ai:'Pregunte en lenguaje natural sobre cualquier dato de la base. Funciona sin conexión con el motor local; con clave de Claude (Configuración) responde preguntas abiertas.',
+  guide:'Guía para aprender el sistema: qué resuelve, el recorrido de una orden, roles, misiones para explorar, cómo funciona por dentro, guion de demostración y preguntas de supervisores.',
+  cfg:'Ajuste la velocidad del reloj, los minutos del semáforo, el sonido, las cuentas y los datos. Los cambios se guardan en este navegador.'
+};
+ACT.help=()=>dlg({title:'Ayuda · '+(TABS.find(t=>t.k===UI.tab)||{lg:''}).lg,body:esc(HELP[UI.tab]||'').replace(/\n/g,'<br>'),buttons:[{label:'Entendido',bg:C.green}]});
+/* exportar / importar */
+function csvCell(v){v=v==null?'':String(v);return/[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+ACT.csv=()=>{
+  const now=simNow(),head=['ID Symphony','Habitación','Piso','Estado','Registrada','Creada por','Asignada a','Entregó','Entregada','Min en habitación','Retiró','Retirada','Retiro anticipado'];
+  const rows=S.orders.map(o=>[o.id,o.hab,o.piso,NV[nivel(o,now)].label,fmtDT(o.t.registrado),o.creado_por,o.asignado,o.entregado_por,o.t.entregado?fmtDT(o.t.entregado):'',o.t.entregado?minEnHab(o,now).toFixed(1):'',o.retirado_por,o.t.retirado?fmtDT(o.t.retirado):'',o.anticipado?'Sí':'']);
+  download(`vajilla_ordenes_${stamp()}.csv`,'\ufeff'+[head,...rows].map(r=>r.map(csvCell).join(',')).join('\r\n'),'text/csv;charset=utf-8');toast('CSV exportado','ok');
+};
+ACT.json=()=>{const d=JSON.parse(JSON.stringify(S));d.cfg.apiKey='';d.exportedSim=simNow();download(`vajilla_base_${stamp()}.json`,JSON.stringify(d,null,1),'application/json');toast('JSON exportado (sin clave de API)','ok')};
+ACT.import=()=>$('#fimp').click();
+function onImportFile(e){
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    let d;try{d=JSON.parse(r.result)}catch(x){return toast('El archivo no es un JSON válido','err')}
+    if(!d||!Array.isArray(d.orders))return toast('El JSON no tiene el formato de esta base de datos','err');
+    confirmDlg('Importar base de datos',`Se reemplazarán los datos actuales por los del archivo (${d.orders.length} órdenes).`,'Importar',()=>{
+      const key=S.cfg.apiKey;S=normalizeState(d);S.cfg.apiKey=S.cfg.apiKey||key;
+      S.clock={aReal:Date.now(),aSim:d.exportedSim||(d.clock&&d.clock.aSim)||Date.now(),speed:1};
+      if(!cur())sess.del('riss_user');save();toast('Base de datos importada','ok');render();
+    },C.red);
+  };
+  r.readAsText(f);
+}
+ACT.seed=()=>confirmDlg('Datos de ejemplo','Se reemplazarán todas las órdenes y la bitácora por datos de ejemplo.','Cargar',()=>{const u=S.users,c=S.cfg;S=defaults();S.users=u;S.cfg=c;seedDemo();toast('Datos de ejemplo cargados','ok');render()},C.blue);
+ACT.wipe=()=>confirmDlg('Vaciar órdenes','Se borrarán TODAS las órdenes y la bitácora. No se puede deshacer.','Sí, vaciar',()=>{S.orders=[];S.log=[];S.undo=[];save();toast('Base de datos vaciada','ok');render()},C.red);
+/* configuración */
+ACT.thr=a=>{
+  const[k,d]=a.split(':');let am=S.cfg.amarillo,ro=S.cfg.rojo;
+  if(k==='amarillo')am+=+d;else ro+=+d;
+  if(am<5||ro>240||am>=ro){UI.cfgMsg='El pre-aviso debe ser menor que la recolección (mín. 5 y máx. 240 min).';render();return}
+  S.cfg.amarillo=am;S.cfg.rojo=ro;UI.cfgMsg='';save();render();
+};
+ACT.sound=()=>{S.cfg.sound=!S.cfg.sound;save();if(S.cfg.sound){ensureAudio();beep(660,1)}render()};
+ACT.delUser=i=>{
+  if(!can('admin'))return deny('Solo el administrador gestiona cuentas');
+  const u=S.users[+i],me=cur();
+  if(!u)return;
+  if(u.name===me.name){UI.cfgMsg='No puede eliminar la cuenta con la que inició sesión.';return render()}
+  if(u.rol==='admin'&&S.users.filter(x=>x.rol==='admin').length<2){UI.cfgMsg='Debe quedar al menos un administrador.';return render()}
+  S.users.splice(+i,1);UI.cfgMsg=`Cuenta «${u.name}» eliminada.`;save();render();
+};
+ACT.addUser=()=>{
+  if(!can('admin'))return deny('Solo el administrador gestiona cuentas');
+  const n=($('#nu_n').value||'').trim(),p=($('#nu_p').value||'').trim(),r=$('#nu_r').value;
+  if(!n)UI.cfgMsg='Escriba el nombre de la cuenta.';
+  else if(!/^\d{4}$/.test(p))UI.cfgMsg='El PIN debe tener exactamente 4 dígitos.';
+  else if(S.users.some(u=>u.pin===p))UI.cfgMsg='Ese PIN ya está en uso.';
+  else if(S.users.some(u=>norm(u.name)===norm(n)))UI.cfgMsg='Ya existe una cuenta con ese nombre.';
+  else{S.users.push({name:n,pin:p,rol:r});UI.cfgMsg=`Cuenta «${n}» agregada.`;save()}
+  render();
+};
+ACT.saveAI=()=>{S.cfg.apiKey=($('#ai_k').value||'').trim();S.cfg.model=($('#ai_m').value||'').trim()||'claude-sonnet-5-5';save();toast(S.cfg.apiKey?'Claude (API) activado':'Se usará el motor local','ok');render()};
+ACT.demoToggle=()=>{if(!can('admin'))return deny();S.cfg.demo=!S.cfg.demo;save();toast(S.cfg.demo?'Acceso rápido visible':'Acceso rápido oculto','ok');render()};
+ACT.clearKey=()=>{S.cfg.apiKey='';save();toast('Clave eliminada','ok');render()};
+/* asistente */
+ACT.aiQ=q=>{const i=$('#aiq');if(i)i.value=q;ACT.aiSend()};
+ACT.aiSend=async()=>{
+  const i=$('#aiq');if(!i||UI.aiBusy)return;
+  const q=i.value.trim();if(!q)return;
+  UI.aiMsgs.push({r:'u',t:q});UI.aiBusy=!!S.cfg.apiKey;
+  let ans;
+  if(S.cfg.apiKey){
+    RENDER.ai();
+    try{const t=await aiClaude(q);ans={text:t||'(sin respuesta)'};UI.aiHist.push({role:'user',content:q},{role:'assistant',content:ans.text})}
+    catch(e){ans=aiLocal(q);ans.text='No pude consultar Claude ('+e.message+'). Respuesta del motor local:\n\n'+ans.text}
+  }else ans=aiLocal(q);
+  UI.aiBusy=false;UI.aiMsgs.push({r:'b',t:ans.text,acts:ans.acts});
+  if(UI.tab==='ai'){RENDER.ai();const n=$('#aiq');if(n)n.focus()}
+};
+ACT.aiClear=()=>{UI.aiMsgs=[];UI.aiHist=[];render()};
+ACT.aiSave=()=>{download(`chat_asistente_${stamp()}.txt`,UI.aiMsgs.map(m=>(m.r==='u'?'Usted: ':'Asistente: ')+m.t).join('\n\n'),'text/plain;charset=utf-8');toast('Chat guardado','ok')};
+
+/* ================= sonido ================= */
+let AC=null;
+function ensureAudio(){try{if(!AC){const A=window.AudioContext||window.webkitAudioContext;if(A)AC=new A()}if(AC&&AC.state==='suspended')AC.resume()}catch(e){}}
+function beep(f,n){
+  if(!AC||!S.cfg.sound)return;
+  try{for(let i=0;i<n;i++){const t=AC.currentTime+i*.3,o=AC.createOscillator(),g=AC.createGain();
+    o.type='square';o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.24);
+    o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+.26)}}catch(e){}
+}
+
+/* ================= inicio de sesión ================= */
+function showLogin(){
+  $('#lgdemo').style.display=S.cfg.demo===false?'none':'';
+  UI.pin='';$('#login').classList.remove('off');
+  $('#lgpad').innerHTML=[1,2,3,4,5,6,7,8,9].map(n=>`<button data-act="lg" data-arg="${n}">${n}</button>`).join('')+`<button class="clr" data-act="lg" data-arg="clr">Borrar</button><button data-act="lg" data-arg="0">0</button><button class="go" data-act="lg" data-arg="go">Entrar</button>`;
+  drawPin();$('#lgerr').textContent='';
+}
+function drawPin(){$('#lgfld').textContent='●'.repeat(UI.pin.length)}
+function loginAs(u){
+  sess.set('riss_user',u.name);UI.tab=PERM[u.rol].tabs[0];
+  if(u.rol==='admin'||u.rol==='supervisor')UI.tab='board';
+  UI.pin='';closeDlg();render();toast(`Bienvenido, ${u.name}`,'ok');
+}
+ACT.lg=k=>{
+  ensureAudio();const err=$('#lgerr');err.textContent='';
+  if(k==='clr'){UI.pin='';drawPin();return}
+  if(k==='go'){const u=S.users.find(x=>x.pin===UI.pin);if(u)loginAs(u);else{err.textContent='PIN incorrecto';UI.pin='';drawPin()}return}
+  if(UI.pin.length<4)UI.pin+=k;drawPin();
+  if(UI.pin.length===4)ACT.lg('go');
+};
+ACT.demo=()=>dlg({title:'Acceso rápido (demo)',body:'<div class="tgrid" style="flex-direction:column">'+S.users.map(u=>`<button data-act="demoLogin" data-arg="${esc(u.name)}" style="min-width:560px;text-align:left;padding-left:18px">${esc(u.name)} · ${ROLES[u.rol]} · PIN ${esc(u.pin)}</button>`).join('')+'</div>',buttons:[{label:'Cancelar',bg:C.gray}]});
+ACT.demoLogin=n=>{const u=S.users.find(x=>x.name===n);if(u)loginAs(u)};
+
+/* ================= reloj general (tick) ================= */
+let lastSig='',lastLv={},firstTick=true;
+function updateTimers(now){
+  $$('[data-t0]').forEach(e=>e.textContent=fmtDur(now-(+e.dataset.t0)));
+  $$('[data-tr]').forEach(e=>e.textContent=fmtDur(now-(+e.dataset.tr)));
+  $$('[data-rem]').forEach(e=>{const m=Math.max(0,Math.ceil(S.cfg.rojo-(now-(+e.dataset.rem))/MIN));e.textContent=(e.dataset.pre?'PRE-AVISO · ':'')+'RETIRO EN '+m+' MIN'});
+}
+function tick(force){
+  if(!S)return;
+  const u=cur(),now=simNow();
+  if(!u)return;
+  const sig=S.orders.map(o=>o.uid+':'+nivel(o,now)).join('|')+S.cfg.amarillo+S.cfg.rojo;
+  let beepY=false,beepR=false;
+  S.orders.forEach(o=>{const n=nivel(o,now),p=lastLv[o.uid];
+    if(!firstTick&&p&&p!==n){if(n==='AMARILLO')beepY=true;if(n==='ROJO')beepR=true}
+    lastLv[o.uid]=n});
+  if(beepR){beep(880,2);toast('Hay vajilla en RECOLECCIÓN (rojo)','err')}else if(beepY){beep(660,1);toast('Pre-aviso: vajilla próxima a retirar','ok')}
+  firstTick=false;
+  renderStatus();
+  if(sig!==lastSig||force){
+    lastSig=sig;
+    if(['board','runner','op'].includes(UI.tab)||(UI.tab==='db'&&['resumen','mapa'].includes(UI.sub)))render();
+  }
+  updateTimers(now);
+}
+
+/* ================= teclado físico ================= */
+document.addEventListener('keydown',e=>{
+  if(!$('#login').classList.contains('off')){
+    if(/^\d$/.test(e.key))ACT.lg(e.key);else if(e.key==='Backspace'){UI.pin=UI.pin.slice(0,-1);drawPin()}else if(e.key==='Enter')ACT.lg('go');
+    return;
+  }
+  if(e.key==='Escape'&&$('#modal').classList.contains('on')){closeDlg();return}
+  const a=document.activeElement;
+  if(UI.tab!=='op'||$('#modal').classList.contains('on')||(a&&/INPUT|SELECT|TEXTAREA/.test(a.tagName)))return;
+  if(/^\d$/.test(e.key))ACT.opk(e.key);
+  else if(e.key==='Backspace')ACT.opk('bs');
+  else if(e.key==='Tab'){e.preventDefault();ACT.opk('next')}
+  else if(e.key==='Enter')ACT.opk(UI.opF==='id'?'next':'send');
+});
+
+['json','import','seed','wipe'].forEach(n=>{const f=ACT[n];ACT[n]=(...a)=>can('admin')?f(...a):deny('Solo el administrador puede hacer esto')});
+
+/* ================= arranque ================= */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]');if(!el)return;
+  const f=ACT[el.dataset.act];if(f){ensureAudio();f(el.dataset.arg,el)}
+});
+window.addEventListener('resize',fit);
+window.addEventListener('storage',e=>{
+  if(e.key!==LS_KEY||!e.newValue)return;
+  try{S=normalizeState(JSON.parse(e.newValue))}catch(x){return}
+  if(cur()&&!$('#modal').classList.contains('on'))render();
+});
+function init(){
+  S=load();fit();
+  $('#modal').addEventListener('mousedown',e=>{if(e.target.id==='modal')closeDlg()});
+  $('#fimp').addEventListener('change',onImportFile);
+  $('#lgdemo').dataset.act='demo';
+  S.orders.forEach(o=>lastLv[o.uid]=nivel(o));
+  if(cur())render();else showLogin();
+  setInterval(()=>tick(),1000);
+}
+init();
+</script>
+</body></html>
